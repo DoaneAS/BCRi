@@ -1,26 +1,23 @@
 #' Prepare Clone
 #'
-#' @param db
-#' @param junction
-#' @param v_call
-#' @param j_call
-#' @param first
-#' @param cdr3
-#' @param fields
-#' @param cell_id
-#' @param locus
-#' @param only_heavy
-#' @param mod3
-#' @param max_n
-#'
-#' @returns
+#' @param db db
+#' @param junction junciotn seq
+#' @param v_call v_call
+#' @param j_call j_call
+#' @param first first allele or union
+#' @param cdr3 cdr3 only
+#' @param fields additional fields eg subject
+#' @param cell_id cell id
+#' @param locus locus column
+#' @param only_heavy default true
+#' @param mod3 mod3 seq only
+#' @param max_n max
+#' @returns list
 #' @export
-#'
-#' @examples
 prepare_clone <- function(db,
-                          junction = "junction", v_call = "v_call_genotyped", j_call = "j_call",
+                          junction = "junction", v_call = "v_call", j_call = "j_call",
                           first = FALSE, cdr3 = FALSE, fields = NULL,
-                          cell_id = NULL, locus = NULL, only_heavy = TRUE,
+                          cell_id = NULL, locus = "locus", only_heavy = TRUE,
                           mod3 = FALSE, max_n = 0) {
   # add junction length column
   db$junction_l <- stringi::stri_length(db[[junction]])
@@ -44,7 +41,8 @@ prepare_clone <- function(db,
       dplyr::filter(!!rlang::sym(junction_l) > 6)
     # add cdr3 column
     db$cdr3_col <- substr(db[[junction]], 4, db[[junction_l]]-3)
-    cdr3_col <- "cdr3_col"
+    #cdr3_col <- "cdr3_col"
+    cdr3_col = db$cdr3_col
   } else {
     n_rmv_cdr3 <- 0
     cdr3_col <- NA
@@ -101,4 +99,61 @@ prepare_clone <- function(db,
                       "cdr3_col" =  cdr3_col)
   return(return_list)
 }
+
+
+
+
+
+bcrCounts <- function(data, inds) {
+  dbj = data %>% dplyr::group_by(.data[[inds]]) %>%
+    dplyr::summarise(n = n())
+  dbj$p = dbj$n / sum(dbj$n)
+  return(dbj)
+}
+
+
+#
+# phenocounts <- function(data, pheno, inds) {
+#   dbp = data %>% dplyr::group_by(.data[[inds]], .data[[pheno]]) %>%
+#     dplyr::summarise(n = n()) %>%
+#     dplyr::mutate(p = n / sum(n)) %>%
+#     tidyr::spread(key = {{pheno}}, value = p, fill=0)
+#   return(dbp)
+# }
+
+
+
+
+
+
+phenocounts <- function(data, pheno, inds) {
+  dbp = data %>% dplyr::group_by(.data[[inds]], .data[[pheno]]) %>%
+    dplyr::summarise(n = n()) %>%
+    #dplyr::mutate(p = n / sum(n)) %>%
+    tidyr::spread(key = {{pheno}}, value = n, fill=0)
+  return(dbp)
+}
+
+
+
+get_jd <- function(db, pheno, indVar="ind") {
+  dbp = db %>% dplyr::group_by(.data[[indVar]], .data[[pheno]]) %>%
+    dplyr::summarise(n = n()) %>%
+    tidyr::spread(key = {{pheno}}, value = n, fill=0)
+  return(dbp)
+}
+
+
+
+
+get_jd_p <- function(db, pheno, indVar="ind") {
+  dbp = db %>% dplyr::group_by(.data[[indVar]], .data[[pheno]]) %>%
+    dplyr::summarise(n = n() )
+
+  dbp$p = dbp$n / sum(dbp$n)
+  dbp = dbp %>%  tidyr::spread(key = {{pheno}}, value = p, fill=0)
+  return(dbp)
+}
+
+
 

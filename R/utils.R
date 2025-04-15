@@ -138,7 +138,7 @@ krnlMtxGenerator <- function(mtx) {
 # *****************************************************************************
 # affinity matrix calculator
 # Disconnect those edges with distance larger than threshold
-p <- function(mtx_o, mtx_k, thd) {
+makeAffinity <- function(mtx_o, mtx_k, thd) {
   mtx_k[mtx_o > thd] <- 0
   return(mtx_k)
 }
@@ -182,138 +182,138 @@ likelihoods <- function(tot_mtx, sh_mtx, mutab_mtx) {
 # *****************************************************************************
 
 # *****************************************************************************
-pairwiseMutions <- function(germ_imgt,
-                            seq_imgt,
-                            junc_length,
-                            len_limit = NULL,
-                            cdr3 = FALSE,
-                            mutabs = NULL,
-                            norm_fact = TRUE) {
-
-  ##### get number of seqs
-  n <- unique(c(length(seq_imgt), length(germ_imgt)))
-  ##### check number of sequences
-  if (length(n) > 1) stop("germ_imgt and seq_imgt number should be the same")
-  if (n == 1) stop("there should be at least two seqs")
-  # check consensus length
-  if (!is.null(len_limit)) {
-    lenConsensus <- len_limit@seqLength
-    seq_imgt  <- substr(seq_imgt, start = 1, stop = lenConsensus)
-    germ_imgt <- substr(germ_imgt, start = 1, stop = lenConsensus)
-    eff_germ <- ifelse(length(unique(germ_imgt)) == 1,
-                       unique(germ_imgt),
-                       consensusSequence(sequences = unique(germ_imgt),
-                                         muFreqColumn = NULL,
-                                         lenLimit = lenConsensus,
-                                         method = "catchAll",
-                                         minFreq = NULL,
-                                         includeAmbiguous = FALSE,
-                                         breakTiesStochastic = FALSE,
-                                         breakTiesByColumns = NULL,
-                                         db = NULL)$cons)
-  } else {
-    ##### constants
-    lv <- ifelse(cdr3, shazam::IMGT_V@seqLength, shazam::IMGT_V@seqLength - 3)
-    trim_l <- junc_length
-    ##### trim out junction/cdr3 segments from seq_imgt
-    seq_imgt <- sapply(1:length(seq_imgt), function(i){
-      x <- strsplit(seq_imgt[i], split="")[[1]]
-      x[(lv+1):(lv+trim_l)] <- ""   # x[(lv+1):(lv+trim_l[i])] <- ""
-      return(paste(x, collapse=""))
-    })
-    ##### Pads ragged ends
-    l <- unique(stringi::stri_length(seq_imgt))
-    if (length(l) > 1) {
-      seq_imgt <- padSeqEnds(seq = seq_imgt, len = NULL, start = FALSE, pad_char = "N")
-    }
-    ##### trim out junction/cdr3 segments from germ_imgt
-    germ_imgt <- sapply(1:length(germ_imgt), function(i){
-      x <- strsplit(germ_imgt[i], split="")[[1]]
-      x[(lv+1):(lv+trim_l)] <- ""  # x[(lv+1):(lv+trim_l[i])] <- ""
-      return(paste(x, collapse=""))
-    })
-    ##### Pads ragged ends
-    l <- unique(stringi::stri_length(germ_imgt))
-    if (length(l) > 1) {
-      germ_imgt <- padSeqEnds(seq = germ_imgt, len = NULL, start = FALSE, pad_char = "N")
-    }
-    ##### find consensus germline (allel level grouping)
-    # see arg "method" from shazam::collapseClones function
-    eff_germ <- ifelse(length(unique(germ_imgt)) == 1,
-                       unique(germ_imgt),
-                       consensusSequence(sequences = unique(germ_imgt),
-                                         muFreqColumn = NULL,
-                                         lenLimit = NULL,
-                                         method = "catchAll",
-                                         minFreq = NULL,
-                                         includeAmbiguous = FALSE,
-                                         breakTiesStochastic = FALSE,
-                                         breakTiesByColumns = NULL,
-                                         db = NULL)$cons)
-    ##### check germ and seqs lengths
-    seq_imgt_lent <- unique(stringi::stri_length(seq_imgt))
-    germ_imgt_lent <- unique(stringi::stri_length(germ_imgt))
-    eff_germ_lent <- stringi::stri_length(eff_germ)
-    lenConsensus <- min(seq_imgt_lent, germ_imgt_lent, eff_germ_lent)
-    ##### trim extra characters
-    if ( seq_imgt_lent > lenConsensus)  { seq_imgt <- substr( seq_imgt, start = 1, stop = lenConsensus) }
-    if (germ_imgt_lent > lenConsensus) { germ_imgt <- substr(germ_imgt, start = 1, stop = lenConsensus) }
-    if ( eff_germ_lent > lenConsensus)  { eff_germ <- substr( eff_germ, start = 1, stop = lenConsensus) }
-  }
-  ##### count informative positions
-  if (norm_fact) {
-    informative_pos <- sapply(1:n, function(x){ sum(stringi::stri_count(seq_imgt[x], fixed = c("A","C","G","T"))) })
-  } else {
-    informative_pos <- rep(1, n)
-  }
-  ##### convert eff_germ and seq_imgt to matrices
-  seqsMtx <- matrix(NA, nrow=n, ncol=lenConsensus)
-  effMtx <- matrix(NA, nrow=n, ncol=lenConsensus)
-  for (i in 1:n) {
-    seqsMtx[i, ] <- strsplit(seq_imgt[i], split = "")[[1]][1:lenConsensus]
-    effMtx[i, ] <- strsplit(eff_germ, split = "")[[1]][1:lenConsensus]
-  }
-  ##### make a distance matrix
-  dnaMtx <- getDNAMatrix(gap = 0)
-  mutMtx <- matrix(NA, nrow=n, ncol=lenConsensus)
-  for (i in 1:n) {
-    mutMtx[i, ] <- sapply(1:lenConsensus, function(j) {
-      return(dnaMtx[effMtx[i,j], seqsMtx[i,j]])
-    })
-  }
-  ##### make a mutation matrix
-  mutMtx <- matrix(paste0(effMtx, mutMtx, seqsMtx), nrow=n, ncol=lenConsensus)
-  ##### clean non-mutated elements
-  mutMtx[grepl(pattern="0", mutMtx)] <- NA
-  ##### check mutabilities
-  ##### make a motif matrix
-  motifMtx <- matrix(0, nrow=n, ncol=lenConsensus)
-  if (!is.null(mutabs)) {
-    for (i in 1:n) {
-      for (j in 3:(lenConsensus-2)) {
-        motifMtx[i, j] <- mutabs[substr(germ_imgt[i], start = j-2, stop = j+2)]
-      }
-    }
-    motifMtx[is.na(motifMtx)] <- 0
-  }
-  ##### calculate mutation matrix
-  results <- pairwiseMutMatrix(informative_pos = informative_pos,
-                               mutMtx = mutMtx,
-                               motifMtx = motifMtx)
-  sh_mtx <- results$sh_mtx
-  tot_mtx <- results$tot_mtx
-  mutab_mtx <- results$mutab_mtx
-  ##### make symmetric matrix
-  sh_mtx[lower.tri(sh_mtx)] <- t(sh_mtx)[lower.tri(sh_mtx)]
-  tot_mtx[lower.tri(tot_mtx)] <- t(tot_mtx)[lower.tri(tot_mtx)]
-  mutab_mtx[lower.tri(mutab_mtx)] <- t(mutab_mtx)[lower.tri(mutab_mtx)]
-  # return results
-  return_list <- list("pairWiseSharedMut" = sh_mtx,
-                      "pairWiseTotalMut" = tot_mtx,
-                      "pairWiseMutability" = mutab_mtx)
-  return(return_list)
-}
-# *****************************************************************************
+# pairwiseMutions <- function(germ_imgt,
+#                             seq_imgt,
+#                             junc_length,
+#                             len_limit = NULL,
+#                             cdr3 = FALSE,
+#                             mutabs = NULL,
+#                             norm_fact = TRUE) {
+#
+#   ##### get number of seqs
+#   n <- unique(c(length(seq_imgt), length(germ_imgt)))
+#   ##### check number of sequences
+#   if (length(n) > 1) stop("germ_imgt and seq_imgt number should be the same")
+#   if (n == 1) stop("there should be at least two seqs")
+#   # check consensus length
+#   if (!is.null(len_limit)) {
+#     lenConsensus <- len_limit@seqLength
+#     seq_imgt  <- substr(seq_imgt, start = 1, stop = lenConsensus)
+#     germ_imgt <- substr(germ_imgt, start = 1, stop = lenConsensus)
+#     eff_germ <- ifelse(length(unique(germ_imgt)) == 1,
+#                        unique(germ_imgt),
+#                        consensusSequence(sequences = unique(germ_imgt),
+#                                          muFreqColumn = NULL,
+#                                          lenLimit = lenConsensus,
+#                                          method = "catchAll",
+#                                          minFreq = NULL,
+#                                          includeAmbiguous = FALSE,
+#                                          breakTiesStochastic = FALSE,
+#                                          breakTiesByColumns = NULL,
+#                                          db = NULL)$cons)
+#   } else {
+#     ##### constants
+#     lv <- ifelse(cdr3, shazam::IMGT_V@seqLength, shazam::IMGT_V@seqLength - 3)
+#     trim_l <- junc_length
+#     ##### trim out junction/cdr3 segments from seq_imgt
+#     seq_imgt <- sapply(1:length(seq_imgt), function(i){
+#       x <- strsplit(seq_imgt[i], split="")[[1]]
+#       x[(lv+1):(lv+trim_l)] <- ""   # x[(lv+1):(lv+trim_l[i])] <- ""
+#       return(paste(x, collapse=""))
+#     })
+#     ##### Pads ragged ends
+#     l <- unique(stringi::stri_length(seq_imgt))
+#     if (length(l) > 1) {
+#       seq_imgt <- padSeqEnds(seq = seq_imgt, len = NULL, start = FALSE, pad_char = "N")
+#     }
+#     ##### trim out junction/cdr3 segments from germ_imgt
+#     germ_imgt <- sapply(1:length(germ_imgt), function(i){
+#       x <- strsplit(germ_imgt[i], split="")[[1]]
+#       x[(lv+1):(lv+trim_l)] <- ""  # x[(lv+1):(lv+trim_l[i])] <- ""
+#       return(paste(x, collapse=""))
+#     })
+#     ##### Pads ragged ends
+#     l <- unique(stringi::stri_length(germ_imgt))
+#     if (length(l) > 1) {
+#       germ_imgt <- padSeqEnds(seq = germ_imgt, len = NULL, start = FALSE, pad_char = "N")
+#     }
+#     ##### find consensus germline (allel level grouping)
+#     # see arg "method" from shazam::collapseClones function
+#     eff_germ <- ifelse(length(unique(germ_imgt)) == 1,
+#                        unique(germ_imgt),
+#                        consensusSequence(sequences = unique(germ_imgt),
+#                                          muFreqColumn = NULL,
+#                                          lenLimit = NULL,
+#                                          method = "catchAll",
+#                                          minFreq = NULL,
+#                                          includeAmbiguous = FALSE,
+#                                          breakTiesStochastic = FALSE,
+#                                          breakTiesByColumns = NULL,
+#                                          db = NULL)$cons)
+#     ##### check germ and seqs lengths
+#     seq_imgt_lent <- unique(stringi::stri_length(seq_imgt))
+#     germ_imgt_lent <- unique(stringi::stri_length(germ_imgt))
+#     eff_germ_lent <- stringi::stri_length(eff_germ)
+#     lenConsensus <- min(seq_imgt_lent, germ_imgt_lent, eff_germ_lent)
+#     ##### trim extra characters
+#     if ( seq_imgt_lent > lenConsensus)  { seq_imgt <- substr( seq_imgt, start = 1, stop = lenConsensus) }
+#     if (germ_imgt_lent > lenConsensus) { germ_imgt <- substr(germ_imgt, start = 1, stop = lenConsensus) }
+#     if ( eff_germ_lent > lenConsensus)  { eff_germ <- substr( eff_germ, start = 1, stop = lenConsensus) }
+#   }
+#   ##### count informative positions
+#   if (norm_fact) {
+#     informative_pos <- sapply(1:n, function(x){ sum(stringi::stri_count(seq_imgt[x], fixed = c("A","C","G","T"))) })
+#   } else {
+#     informative_pos <- rep(1, n)
+#   }
+#   ##### convert eff_germ and seq_imgt to matrices
+#   seqsMtx <- matrix(NA, nrow=n, ncol=lenConsensus)
+#   effMtx <- matrix(NA, nrow=n, ncol=lenConsensus)
+#   for (i in 1:n) {
+#     seqsMtx[i, ] <- strsplit(seq_imgt[i], split = "")[[1]][1:lenConsensus]
+#     effMtx[i, ] <- strsplit(eff_germ, split = "")[[1]][1:lenConsensus]
+#   }
+#   ##### make a distance matrix
+#   dnaMtx <- getDNAMatrix(gap = 0)
+#   mutMtx <- matrix(NA, nrow=n, ncol=lenConsensus)
+#   for (i in 1:n) {
+#     mutMtx[i, ] <- sapply(1:lenConsensus, function(j) {
+#       return(dnaMtx[effMtx[i,j], seqsMtx[i,j]])
+#     })
+#   }
+#   ##### make a mutation matrix
+#   mutMtx <- matrix(paste0(effMtx, mutMtx, seqsMtx), nrow=n, ncol=lenConsensus)
+#   ##### clean non-mutated elements
+#   mutMtx[grepl(pattern="0", mutMtx)] <- NA
+#   ##### check mutabilities
+#   ##### make a motif matrix
+#   motifMtx <- matrix(0, nrow=n, ncol=lenConsensus)
+#   if (!is.null(mutabs)) {
+#     for (i in 1:n) {
+#       for (j in 3:(lenConsensus-2)) {
+#         motifMtx[i, j] <- mutabs[substr(germ_imgt[i], start = j-2, stop = j+2)]
+#       }
+#     }
+#     motifMtx[is.na(motifMtx)] <- 0
+#   }
+#   ##### calculate mutation matrix
+#   results <- pairwiseMutMatrix(informative_pos = informative_pos,
+#                                mutMtx = mutMtx,
+#                                motifMtx = motifMtx)
+#   sh_mtx <- results$sh_mtx
+#   tot_mtx <- results$tot_mtx
+#   mutab_mtx <- results$mutab_mtx
+#   ##### make symmetric matrix
+#   sh_mtx[lower.tri(sh_mtx)] <- t(sh_mtx)[lower.tri(sh_mtx)]
+#   tot_mtx[lower.tri(tot_mtx)] <- t(tot_mtx)[lower.tri(tot_mtx)]
+#   mutab_mtx[lower.tri(mutab_mtx)] <- t(mutab_mtx)[lower.tri(mutab_mtx)]
+#   # return results
+#   return_list <- list("pairWiseSharedMut" = sh_mtx,
+#                       "pairWiseTotalMut" = tot_mtx,
+#                       "pairWiseMutability" = mutab_mtx)
+#   return(return_list)
+# }
+# # *****************************************************************************
 
 # *****************************************************************************
 ### make a dataframe of unique seqs in each clone

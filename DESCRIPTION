@@ -1,17 +1,29 @@
 Package: BCRi
-Title: What the Package Does (One Line, Title Case)
+Title: Analysis of repertoire diversity across B cell phenotypes from single cell BCR-seq
 Version: 0.0.0.1
 Authors@R: 
     person(c("Ashley", "Doane"), "Stephen", , "ashley.doane@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-1489-1786"))
-Description: What the package does (one paragraph).
+Description: Analysis of repertoire diversity across B cell phenotypes from single cell BCR-seq
 License: MIT + file LICENSE
 Imports: 
     alakazam,
     data.table,
+    doParallel,
     dplyr,
+    foreach,
+    ggplot2,
+    igraph,
+    methods,
+    Rcpp,
+    rlang,
+    scales,
     scoper,
-    shazam
+    shazam,
+    stringi,
+    tidyr
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
+LinkingTo: 
+    Rcpp
