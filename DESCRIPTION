@@ -8,7 +8,9 @@ Description: Analysis of repertoire diversity across B cell phenotypes from sing
 License: MIT + file LICENSE
 Imports: 
     alakazam,
+    Biostrings,
     data.table,
+    DECIPHER,
     doParallel,
     dplyr,
     foreach,

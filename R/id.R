@@ -151,6 +151,7 @@ pairwiseMutMatrix <- function(informative_pos, mutMtx, motifMtx) {
 #' @param clone column name for clone
 #' @importFrom igraph diversity degree graph_from_adjacency_matrix simplify
 #' @returns list with affinity matrix, db for clone, and data.frame of per-phenotype diversity metrics using Shannon diversity
+#' @export
 intraclonal_shannon <- function(db,
                                 cloneID,
                                 phenotype_var="subset",
@@ -241,7 +242,7 @@ intraclonal_shannon <- function(db,
   # get clone
 
 
-
+  print(cloneID)
   db_clone <- as.data.frame(db[db$clone_id == cloneID, ])
   results_prep = prepare_clone(db = db_clone,
                                junction = junction, v_call = v_call, j_call = j_call,
@@ -376,7 +377,6 @@ intraclonal_shannon <- function(db,
     #idCluster[ind_unq[[i]]] <- idCluster_unq[i]
     db_gp$ind[ind_unq[[i]]] <- i
   }
-
 
   g = igraph::graph_from_adjacency_matrix(aff_mtx, mode = "undirected", weighted = TRUE)
   g =  igraph::simplify(g, remove.loops = TRUE, remove.multiple = FALSE)
@@ -521,7 +521,7 @@ intraclonal_shannon <- function(db,
 #' @param cell_id cell id
 #' @param clone column name of clone variable in db
 #' @export
-#' @returns list with affinity matrix, db for clone, and data.frame of per-phenotype diversity metrics using Simposon diversity
+#' @returns data.frame of diversity metrics and phenotype ##list with affinity matrix, db for clone, and data.frame of per-phenotype diversity metrics using Simposon diversity
 intraclonal_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=NULL, clone = "clone_id", cdr3=FALSE) {
   model = "spectral"
   method = "vj"
@@ -580,28 +580,41 @@ intraclonal_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_i
 
   n <- nrow(db_gp)
 
-  ### cloning
-  # if (method == "vj") {
-  #   ### check targeting model
-  #   if (!is.null(mutabs)) {
-  #     mutabs <- mutabs@mutability
-  #   } else {
-  #     mutabs <- NULL
-  #   }
-  # get required info based on the method
+
   germs <- db_gp[[germline]]
   seqs <- db_gp[[sequence]]
+  ## accomdate different length sequences for hamming distance
   juncs <- db_gp[[ifelse(cdr3, cdr3_col, junction)]]
+  juncs <- as.character( set_eq_seqDistance(juncs))
   junc_length <- unique(stringi::stri_length(juncs))
   # find unique seqs
+  #.I = NULL
   seqs <- paste(seqs, juncs, germs, sep = "|")
   df <- data.table::as.data.table(seqs)[, list(list(.I)), by=seqs] %>%
     tidyr::separate(col = seqs, into = c("seqs_unq", "juncs_unq", "germs_unq"), sep = "\\|")
   n_unq <- nrow(df)
   ind_unq <- df$V1
-  if (n_unq <= 3) {
+
+  ## make result df here
+  dgc = data.frame(pheno = unique(db_gp[[phenotype_var]]))
+  dgc[[phenotype_var]] = unique(db_gp[[phenotype_var]])
+  #dgc[[phenotype_var]] = unique(db_gp[[phenotype_var]])
+  dgc$intra_clonotypic_entropy_sim = 0
+  dgc$intra_clonotypic_entropy_sim_cells = 0
+  dgc$intra_clonotypic_entropy_sim_seq = 0
+  dgc$simpson_index = 0
+  dgc$clone_id = cloneID
+  dgc$clone_size = n
+
+  if (n_unq <= 2) {
     db_gp$ind <- 0
     db_gp$n_clone = n_unq
+
+    for (i in 1:n_unq) {
+      #idCluster[ind_unq[[i]]] <- idCluster_unq[i]
+      db_gp$ind[ind_unq[[i]]] <- i
+    }
+
 
     #db_gp$vertex_diversity = 0
     #db_gp$gll = 0
@@ -611,19 +624,17 @@ intraclonal_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_i
     #dgc = db_gp %>% dplyr::group_by({{ ind }}, {{ phenotype_var }}) %>%
     #  dplyr::summarise(n = n())
 
-    dgc = data.frame(pheno = unique(db_gp[[phenotype_var]]))
-    dgc[[phenotype_var]] = unique(db_gp[[phenotype_var]])
+    #dgc = data.frame(pheno = unique(db_gp[[phenotype_var]]))
 
-    dgc$intra_clonotypic_entropy_sim = 0
 
-    dgc$clone_ID = cloneID
-    dgc$clone_size = n
+    #dgc$intra_clonotypic_entropy_sim = 0
+
     return_list = list("affinity_mat" = NULL,
                        "db_clone" = db_gp,
                        # "g" = NULL,
                        "db_pheno"= dgc)
 
-    return(return_list)
+    return(dgc)
   } else{
 
     # find corresponding unique germs and junctions
@@ -653,6 +664,8 @@ intraclonal_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_i
     if (all(disim_mtx == dist_mtx) | any(rowSums(disim_mtx) == 0)) {
       # get required info based on the method
       seqs <- db_gp[[ifelse(cdr3, cdr3_col, junction)]]
+      ## set seq lengths with pad
+      seqs <- as.character( set_eq_seqDistance(seqs))
       junc_length <- unique(stringi::stri_length(seqs))
       # find unique seqs
       df <- data.table::as.data.table(seqs)[, list(list(.I)), by = seqs]
@@ -660,13 +673,912 @@ intraclonal_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_i
       ind_unq <- df$V1
       seqs_unq <- df$seqs
       if (n_unq == 1) {
-        return(list("idCluster" = rep(1, n),
-                    "n_cluster" = 1,
-                    "eigen_vals" = rep(0, n)))
+        return(dgc)
+        #return(list("idCluster" = rep(1, n),
+        #            "n_cluster" = 1,
+        #            "eigen_vals" = rep(0, n)))
       }
       # calculate unique seuences distance matrix
       disim_mtx <- alakazam::pairwiseDist(seq = seqs_unq,
                                 dist_mat = getDNAMatrix(gap = 0))
+    }
+    mtx = disim_mtx
+    threshold = NULL
+    base_sim = 0.95
+    iter_max = 1000
+    nstart = 1000
+    mtx = disim_mtx
+    #{
+    ### constants
+    n <- nrow(mtx)
+    bs <- (1 - base_sim)*junc_length
+    off_diags_nuq <- unique(mtx[row(mtx) != col(mtx)])
+
+    krnl_mtx <- krnlMtxGenerator(mtx = mtx)
+    aff_mtx <- krnl_mtx
+
+    aff_mtx[is.na(aff_mtx)] <- 0
+
+    ## return clone db with unique seq identifier
+    db_gp$ind <- 0
+
+    for (i in 1:n_unq) {
+      #idCluster[ind_unq[[i]]] <- idCluster_unq[i]
+      db_gp$ind[ind_unq[[i]]] <- i
+    }
+
+    # aff_mtx_c <- aff_mtx[db_gp$ind,db_gp$ind]
+    #
+    #
+    # #diag(aff_mtx) <- 0
+    # #g = igraph::graph_from_adjacency_matrix(aff_mtx, mode = "undirected", weighted = TRUE, diag = FALSE)
+    # #g = igraph::graph_from_adjacency_matrix(aff_mtx[db_gp$ind,db_gp$ind], mode = "undirected", weighted = TRUE)
+    # g = igraph::graph_from_adjacency_matrix(aff_mtx, mode = "undirected", weighted = TRUE)
+    # #g = igraph::graph_from_adjacency_matrix(aff_mtx, mode = "undirected", weighted = TRUE)
+    #
+    #
+    # #g =  igraph::simplify(g, remove.loops = TRUE, remove.multiple = TRUE)
+    # g =  igraph::simplify(g)
+    #
+    # igraph::V(g)$k = igraph::degree(g)
+    #
+    # #v = igraph::eigen_centrality(g)$vector
+    # #db_gp$ev = v[ db_gp$ind]
+    #
+    # igraph::V(g)$Di <-  igraph::diversity(g)
+    # igraph::V(g)$Hi =  igraph::V(g)$Di * log10(igraph::V(g)$k)
+    #
+
+    # for (i in 1:length(g)) {
+    #   #spij = sum(E(g)[.from(i)]$weight / log(V(g)$k[i]))
+    #   #spij = sum(g[i,] / log(V(g)$k[i]))
+    #   V(g)$sumPij[i] = sum( g[i,] / log(V(g)$k[i]))
+    #   #set_vertex_attr(g, index = V(g)[i], name = "sumPij", value = spij)
+    #   #V(g)$sumPij[i] =  sum(g[i,] / log(V(g)$k[i]))
+    # }
+
+    dbj = bcrCounts(db_gp, inds = "ind")
+    prob_mat =  aff_mtx
+    prob_mat[] <- 0
+
+    for (i in 1:nrow(dbj)) {
+      for (j in 1:nrow(dbj)) {
+        prob_mat[i, j] = dbj$p[i] * dbj$p[j]
+      }
+    }
+
+
+    diag(aff_mtx) = 1
+
+    ## Pi * Pj * Sij, where p is the probability of a cell with BCR sequence x having that sequence
+    ## Useful to correct for cases where more than 1 cell has the same BCR sequence
+    smat = prob_mat * aff_mtx
+
+    dbp =  get_jd(db_gp, pheno = phenotype_var,indVar = indVar)
+    dpp =  get_jd_p(db_gp, pheno = phenotype_var,indVar = indVar)
+
+
+
+
+    # for (f in unique(db_gp[[phenotype_var]])) {
+    #   ix = dbp$ind[ dbp[[f]] >= 1]
+    #   if (length(ix) == 0) {
+    #     next
+    #     #dgc$intra_clonotypic_entropy_sim[dgc$pheno==f] = 0
+    #   }
+    #   dgc$intra_clonotypic_entropy_sim[dgc$pheno==f] = sum(smat[ix,])
+    # }
+
+
+    # for (f in unique(db_gp[[phenotype_var]])) {
+    #   ix = dbp[[indVar]][ dbp[[f]] >= 1]
+    #   if (length(ix) == 0) {
+    #     next
+    #   }
+    #   pilist = list()
+    #   for (i in ix) {
+    #     # for (j in 1:nrow(dbj)) {
+    #     pilist[i] = sum( prob_mat[i, ]  * aff_mtx[i, ])
+    #   }
+    #   dgc$intra_clonotypic_entropy_sim2[dgc$pheno==f] =  sum(unlist(pilist))
+    # }
+
+
+    for (f in unique(db_gp[[phenotype_var]])) {
+      ix = dbp[[indVar]][ dbp[[f]] >=1]
+      if (length(ix) == 0) {
+        next
+      }
+      pilist = list()
+      pcslist = list()
+      pslist = list()
+      for (i in ix) {
+        #for (j in 1:nrow(dbj)) {
+        #dbp[[f]][ix] * dbj$p[j]
+
+        pilist[i] = sum( prob_mat[i, ]  * aff_mtx[i, ]) # pi*pj*wij over i and all js
+        pslist[i] = sum(aff_mtx[i,])
+        pclist = sum(prob_mat[i,])
+      }
+      dgc$intra_clonotypic_entropy_sim[dgc$pheno==f] =  1 - sum(unlist(pilist))
+      dgc$intra_clonotypic_entropy_sim_cells[dgc$pheno==f] =  1 - sum(unlist(pclist))
+      dgc$intra_clonotypic_entropy_sim_seq = sum(unlist(pslist))
+      dgc$ncells[dgc$pheno==f] =  sum(dbp[[f]])
+      dgc$pcells[dgc$pheno==f] =  sum(dpp[[f]])
+      dgc$nseqs[dgc$pheno==f] =  nrow(dbp[ix,])
+      dgc$pseqs[dgc$pheno==f] =  nrow(dbp[ix,]) / nrow(dbp)
+      dgc$simpson_index[dgc$pheno==f] = 1 - sum(dpp[[f]]^2)
+
+    }
+
+
+    return_list <- list("affinity_mat" = aff_mtx,
+                        "db_clone" = db_gp,
+                        #"g" = g,
+                        "db_pheno"= dgc)
+
+    return(dgc)
+  }
+}
+
+
+
+
+
+#' Takes a db, a cloneID, and the name of a phenotype variable and returns the affinity matrix, db, and data.frame of per-phenotype diversity metrics for that clone
+#'
+#' @param db db
+#' @param cloneID ID of clone to analyze
+#' @param phenotype_var phenotype variable
+#' @param cell_id cell id
+#' @param clone column name of clone variable in db
+#' @export
+#' @returns data.frame of diversity metrics and phenotype ##list with affinity matrix, db for clone, and data.frame of per-phenotype diversity metrics using Simposon diversity
+weighted_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=NULL, clone = "clone_id", cdr3=FALSE) {
+  model = "spectral"
+  method = "vj"
+  linkage = c("single", "average", "complete")
+  normalize = "len" ## c("len", "none"),
+  germline = "germline_alignment"
+  sequence = "sequence_alignment"
+  junction = "junction"
+  v_call = "v_call"
+  j_call = "j_call"
+  fields = NULL
+  locus = "locus"
+  only_heavy = TRUE
+  split_light = FALSE
+  targeting_model = shazam::HH_S5F
+  len_limit = NULL
+  first = FALSE
+  #cdr3 = FALSE
+  mod3 = FALSE
+  max_n = 0
+  threshold = 1
+  base_sim = 0.95
+  iter_max = 1000
+  nstart = 1000
+  nproc = 4
+  verbose = FALSE
+  log = NULL
+  summarize_clones = FALSE
+
+  # get clone
+  print(cloneID)
+  db_clone <- as.data.frame(db[db$clone_id == cloneID, ])
+  results_prep = prepare_clone(db = db_clone,
+                               junction = junction, v_call = v_call, j_call = j_call,
+                               first = first, cdr3 = cdr3, fields = fields,
+                               cell_id = cell_id, locus = locus, only_heavy = only_heavy,
+                               mod3 = mod3, max_n = max_n)
+  dbfull = data.table::copy(db)
+  db <- results_prep$db
+  n_rmv_mod3 <- results_prep$n_rmv_mod3
+  n_rmv_cdr3 <- results_prep$n_rmv_cdr3
+  n_rmv_N <- results_prep$n_rmv_N
+  junction_l <- results_prep$junction_l
+  cdr3_col <-  results_prep$cdr3_col
+
+  db_l <- db[db[[locus]] %in% c("IGK", "IGL", "TRA", "TRG"), , drop=F]
+  db <- db[db[[locus]] %in% c("IGH", "TRB", "TRD"), , drop=F]
+  db_gp <- db
+
+  mutabs <- shazam::HH_S5F@mutability
+  # Generated by using Rcpp::compileAttributes() -> do not edit by hand
+  # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
+
+  #Rcpp::sourceCpp("~/Projects/code/scratch/scoper/src/RcppMutation.cpp") # scoper/src/RcppMutation.cpp")
+  #Rcpp::sourceCpp("./src/RcppMutation.cpp")
+
+  n <- nrow(db_gp)
+
+
+  germs <- db_gp[[germline]]
+  seqs <- db_gp[[sequence]]
+  ## accomdate different length sequences for hamming distance
+  juncs <- db_gp[[ifelse(cdr3, cdr3_col, junction)]]
+  #juncs <- as.character( set_eq_seqDistance(juncs))
+  junc_length <- unique(stringi::stri_length(juncs))
+  if (length(junc_length) > 1) {
+    juncs <- as.character( set_eq_seqDistance(juncs))
+    junc_length <- unique(stringi::stri_length(juncs))
+  }
+
+
+  #juncs <- as.character( set_eq_seqDistance(juncs))
+  # find unique seqs
+  #.I = NULL
+  seqs <- paste(seqs, juncs, germs, sep = "|")
+  df <- data.table::as.data.table(seqs)[, list(list(.I)), by=seqs] %>%
+    tidyr::separate(col = seqs, into = c("seqs_unq", "juncs_unq", "germs_unq"), sep = "\\|")
+  n_unq <- nrow(df)
+  ind_unq <- df$V1
+
+  ## make result df here
+  dgc = data.frame(pheno = unique(db_gp[[phenotype_var]]))
+  dgc[[phenotype_var]] = unique(db_gp[[phenotype_var]])
+  #dgc[[phenotype_var]] = unique(db_gp[[phenotype_var]])
+  dgc$intra_clonotypic_entropy_sim = 0
+  dgc$intra_clonotypic_entropy_simi = 0
+  dgc$intra_clonotypic_entropy_simn = NA
+  dgc$intra_clonotypic_entropy_simn_private = 0
+  dgc$intra_clonotypic_entropy_sim_cells = 0
+  dgc$intra_clonotypic_entropy_sim_seq = 0
+  dgc$intra_clonotypic_entropy_seqw = 0
+  dgc$intra_clonotypic_entropy_seqwn = NA
+  dgc$simpson_index = 0
+  dgc$clone_id = cloneID
+  dgc$clone_size = n
+  dgc$type = "limited"
+
+  if (n_unq <= 2) {
+    db_gp$ind <- 0
+    db_gp$n_clone = n_unq
+
+    for (i in 1:n_unq) {
+      #idCluster[ind_unq[[i]]] <- idCluster_unq[i]
+      db_gp$ind[ind_unq[[i]]] <- i
+    }
+
+
+    #db_gp$vertex_diversity = 0
+    #db_gp$gll = 0
+
+    ind = "ind"
+    dbj = bcrCounts(db_gp, inds = "ind")
+
+    dbjp = bcrCounts_pheno(db_gp, inds = "ind", pheno=phenotype_var)
+
+    dbj$w = 0
+    db_gp$w = 0
+    dbjp$w = 0
+
+    dbp =  get_jd(db_gp, pheno = phenotype_var,indVar = indVar)
+    dpp =  get_jd_p(db_gp, pheno = phenotype_var,indVar = indVar)
+
+    dbp_p = dbp
+
+    for (f in unique(db_gp[[phenotype_var]])) {
+      dbp_p[[f]] = dbp_p[[f]] / sum(dbp[[f]])
+    }
+
+    for (f in unique(db_gp[[phenotype_var]])) {
+      ix = dbjp[[indVar]][ dbjp[[phenotype_var]] == f]
+      if (length(ix) == 0) {
+        next
+      }
+      pilist = list()
+      pilist2 = list()
+      ilist = list()
+      pnlist = list()
+      pcslist = list()
+      pslist = list()
+      wlist = list()
+      wnlist = list()
+      pplist = list()
+      for (i in ix) {
+        #for (j in 1:nrow(dbj)) {
+        #dbp[[f]][ix] * dbj$p[j]
+        #w = dbj$w[dbj$ind==i]
+        #wn = dbj$wn[dbj$ind==i]
+
+        ixx = ((dbjp[[indVar]]==i) & (dbjp[[phenotype_var]]==f))
+        pii = dbjp$p[ixx] * sum(dbjp$p[!ixx]) ## pi * pj
+
+        ## pi and pj within phenotype.
+        piii = dbp_p[[f]][dbp_p$ind==i] * sum(dbp_p[[f]][dbp_p$ind!=i]) ## pi * pj
+
+        #ixp = ((dbjp[[indVar]]!=i) & (dbjp[[phenotype_var]]==f)) ##
+
+        # sum of affinities for each cell
+        #pii = dpp[dpp[[indVar]]==i,][[f]] * sum(dpp[dpp[[indVar]]!=i,][[f]])
+          pilist[i] = pii
+          ilist[i] = pii
+          pnlist[i] = pii
+          pplist[i] = piii
+          pcslist[i] = pii
+      }
+      dgc$intra_clonotypic_entropy_sim[dgc$pheno==f] =  sum(unlist(pilist))
+      dgc$intra_clonotypic_entropy_simn[dgc$pheno==f] =  sum(unlist(pnlist))
+      dgc$intra_clonotypic_entropy_simi[dgc$pheno==f] =  sum(unlist(ilist))
+      dgc$intra_clonotypic_entropy_simn_private[dgc$pheno==f] =  sum(unlist(pplist))
+      #dgc$intra_clonotypic_entropy_sim_cells[dgc$pheno==f] =  1 - sum(unlist(pclist))
+      #dgc$intra_clonotypic_entropy_sim_seq = sum(unlist(pslist))
+      dgc$ncells[dgc$pheno==f] =  sum(dbp[[f]])
+      dgc$pcells[dgc$pheno==f] =  sum(dpp[[f]])
+      dgc$nseqs[dgc$pheno==f] =  nrow(dbp[ix,])
+      dgc$pseqs[dgc$pheno==f] =  nrow(dbp[ix,]) / nrow(dbp)
+      dgc$simpson_index[dgc$pheno==f] = sum(unlist(pcslist))
+
+    }
+    #dgc = db_gp %>% dplyr::group_by({{ ind }}, {{ phenotype_var }}) %>%
+    #  dplyr::summarise(n = n())
+
+    #dgc = data.frame(pheno = unique(db_gp[[phenotype_var]]))
+
+
+    #dgc$intra_clonotypic_entropy_sim = 0
+
+    return_list = list("affinity_mat" = NULL,
+                       "db_clone" = db_gp,
+                       # "g" = NULL,
+                       "db_pheno"= dgc)
+
+    return(dgc)
+  } else{
+
+    # find corresponding unique germs and junctions
+    seqs_unq <- df$seqs_unq
+    germs_unq <- df$germs_unq
+    juncs_unq <- df$juncs_unq
+    # calculate unique junctions distance matrix
+    dist_mtx <- alakazam::pairwiseDist(seq = juncs_unq,
+                                       dist_mat = getDNAMatrix(gap = 0))
+    # count mutations from unique sequence imgt
+    results <- pairwiseMutions(germ_imgt = germs_unq,
+                               seq_imgt = seqs_unq,
+                               junc_length = junc_length,
+                               len_limit = len_limit,
+                               cdr3 = cdr3,
+                               mutabs = mutabs)
+    tot_mtx <- results$pairWiseTotalMut
+    sh_mtx <- results$pairWiseSharedMut
+    mutab_mtx <- results$pairWiseMutability
+    # calculate likelihhod matrix
+    lkl_mtx <- likelihoods(tot_mtx = tot_mtx,
+                           sh_mtx = sh_mtx,
+                           mutab_mtx = mutab_mtx)
+    # calculate weighted matrix
+    disim_mtx <- dist_mtx * (1.0 - lkl_mtx)
+
+    if (all(disim_mtx == dist_mtx) | any(rowSums(disim_mtx) == 0)) {
+      # get required info based on the method
+      seqs <- db_gp[[ifelse(cdr3, cdr3_col, junction)]]
+      ## set seq lengths with pad
+      seqs <- as.character( set_eq_seqDistance(seqs))
+      junc_length <- unique(stringi::stri_length(seqs))
+      # find unique seqs
+      df <- data.table::as.data.table(seqs)[, list(list(.I)), by = seqs]
+      n_unq <- nrow(df)
+      ind_unq <- df$V1
+      seqs_unq <- df$seqs
+
+      # calculate unique seuences distance matrix
+      disim_mtx <- alakazam::pairwiseDist(seq = seqs_unq,
+                                          dist_mat = getDNAMatrix(gap = 0))
+
+      db_gp$ind <- 0
+      db_gp$n_clone = n_unq
+
+      for (i in 1:n_unq) {
+        #idCluster[ind_unq[[i]]] <- idCluster_unq[i]
+        db_gp$ind[ind_unq[[i]]] <- i
+      }
+
+
+      #db_gp$vertex_diversity = 0
+      #db_gp$gll = 0
+
+      ind = "ind"
+      dbj = bcrCounts(db_gp, inds = "ind")
+
+      dbjp = bcrCounts_pheno(db_gp, inds = "ind", pheno=phenotype_var)
+
+      dbj$w = 0
+      db_gp$w = 0
+      dbjp$w = 0
+
+      dbp =  get_jd(db_gp, pheno = phenotype_var,indVar = indVar)
+      dpp =  get_jd_p(db_gp, pheno = phenotype_var,indVar = indVar)
+
+      dbp_p = dbp
+
+      for (f in unique(db_gp[[phenotype_var]])) {
+        dbp_p[[f]] = dbp_p[[f]] / sum(dbp[[f]])
+      }
+
+      for (f in unique(db_gp[[phenotype_var]])) {
+        ix = dbjp[[indVar]][ dbjp[[phenotype_var]] == f]
+        if (length(ix) == 0) {
+          next
+        }
+        pilist = list()
+        pilist2 = list()
+        ilist = list()
+        pnlist = list()
+        pcslist = list()
+        pslist = list()
+        wlist = list()
+        wnlist = list()
+        pplist = list()
+        for (i in ix) {
+          #for (j in 1:nrow(dbj)) {
+          #dbp[[f]][ix] * dbj$p[j]
+          #w = dbj$w[dbj$ind==i]
+          #wn = dbj$wn[dbj$ind==i]
+
+          ixx = ((dbjp[[indVar]]==i) & (dbjp[[phenotype_var]]==f))
+          pii = dbjp$p[ixx] * sum(dbjp$p[!ixx]) ## pi * pj
+
+
+          ## pi and pj within phenotype.
+          piii = dbp_p[[f]][dbp_p$ind==i] * sum(dbp_p[[f]][dbp_p$ind!=i]) ## pi * pj
+
+          #ixp = ((dbjp[[indVar]]!=i) & (dbjp[[phenotype_var]]==f)) ##
+
+          # sum of affinities for each cell
+          #pii = dpp[dpp[[indVar]]==i,][[f]] * sum(dpp[dpp[[indVar]]!=i,][[f]])
+          pilist[i] = pii
+          ilist[i] = pii
+          pnlist[i] = pii
+          pplist[i] = piii
+          pcslist[i] = pii
+        }
+        dgc$intra_clonotypic_entropy_sim[dgc$pheno==f] =  sum(unlist(pilist))
+        dgc$intra_clonotypic_entropy_simn[dgc$pheno==f] =  sum(unlist(pnlist))
+        dgc$intra_clonotypic_entropy_simi[dgc$pheno==f] =  sum(unlist(ilist))
+        dgc$intra_clonotypic_entropy_simn_private[dgc$pheno==f] =  sum(unlist(pplist))
+        #dgc$intra_clonotypic_entropy_sim_cells[dgc$pheno==f] =  1 - sum(unlist(pclist))
+        #dgc$intra_clonotypic_entropy_sim_seq = sum(unlist(pslist))
+        dgc$ncells[dgc$pheno==f] =  sum(dbp[[f]])
+        dgc$pcells[dgc$pheno==f] =  sum(dpp[[f]])
+        dgc$nseqs[dgc$pheno==f] =  nrow(dbp[ix,])
+        dgc$pseqs[dgc$pheno==f] =  nrow(dbp[ix,]) / nrow(dbp)
+        dgc$simpson_index[dgc$pheno==f] = sum(unlist(pcslist))
+
+      }
+      #dgc = db_gp %>% dplyr::group_by({{ ind }}, {{ phenotype_var }}) %>%
+      #  dplyr::summarise(n = n())
+
+      #dgc = data.frame(pheno = unique(db_gp[[phenotype_var]]))
+
+
+      #dgc$intra_clonotypic_entropy_sim = 0
+
+      return_list = list("affinity_mat" = NULL,
+                         "db_clone" = db_gp,
+                         # "g" = NULL,
+                         "db_pheno"= dgc)
+
+      return(dgc)
+
+    }
+
+    mtx = disim_mtx
+
+    nearest_dist <- apply(mtx, 2,  function(x) {
+      gt0 <- which(x > 0)
+      if (length(gt0) != 0) { min(x[gt0]) } else { NA }
+    })
+
+
+    krnl_mtx <- krnlMtxGenerator(mtx = mtx)
+
+    aff_mtx <- makeAffinity(mtx_o = mtx,
+                            mtx_k = krnl_mtx,
+                            thd = max(nearest_dist, na.rm = T))
+
+
+
+    threshold = NULL
+    base_sim = 0.95
+    iter_max = 1000
+    nstart = 1000
+    #{
+    ### constants
+    n <- nrow(mtx)
+    bs <- (1 - base_sim)*junc_length
+    off_diags_nuq <- unique(mtx[row(mtx) != col(mtx)])
+
+
+    #aff_mtx <- krnl_mtx
+
+    aff_mtx[is.na(aff_mtx)] <- 0
+
+    ## return clone db with unique seq identifier
+    db_gp$ind <- 0
+
+    for (i in 1:n_unq) {
+      #idCluster[ind_unq[[i]]] <- idCluster_unq[i]
+      db_gp$ind[ind_unq[[i]]] <- i
+    }
+
+    # aff_mtx_c <- aff_mtx[db_gp$ind,db_gp$ind]
+    #
+    #
+    # #diag(aff_mtx) <- 0
+    # #g = igraph::graph_from_adjacency_matrix(aff_mtx, mode = "undirected", weighted = TRUE, diag = FALSE)
+    # #g = igraph::graph_from_adjacency_matrix(aff_mtx[db_gp$ind,db_gp$ind], mode = "undirected", weighted = TRUE)
+    # g = igraph::graph_from_adjacency_matrix(aff_mtx, mode = "undirected", weighted = TRUE)
+    # #g = igraph::graph_from_adjacency_matrix(aff_mtx, mode = "undirected", weighted = TRUE)
+    #
+    #
+    # #g =  igraph::simplify(g, remove.loops = TRUE, remove.multiple = TRUE)
+    # g =  igraph::simplify(g)
+    #
+    # igraph::V(g)$k = igraph::degree(g)
+    #
+    # #v = igraph::eigen_centrality(g)$vector
+    # #db_gp$ev = v[ db_gp$ind]
+    #
+    # igraph::V(g)$Di <-  igraph::diversity(g)
+    # igraph::V(g)$Hi =  igraph::V(g)$Di * log10(igraph::V(g)$k)
+    #
+
+    # for (i in 1:length(g)) {
+    #   #spij = sum(E(g)[.from(i)]$weight / log(V(g)$k[i]))
+    #   #spij = sum(g[i,] / log(V(g)$k[i]))
+    #   V(g)$sumPij[i] = sum( g[i,] / log(V(g)$k[i]))
+    #   #set_vertex_attr(g, index = V(g)[i], name = "sumPij", value = spij)
+    #   #V(g)$sumPij[i] =  sum(g[i,] / log(V(g)$k[i]))
+    # }
+
+   # browser()
+    diag(aff_mtx) = 0
+
+    dbj = bcrCounts(db_gp, inds = "ind")
+    prob_mat =  aff_mtx
+    prob_mat[] <- 0
+
+    for (i in 1:nrow(dbj)) {
+      for (j in 1:nrow(dbj)) {
+        prob_mat[i, j] = dbj$p[i] * dbj$p[j]
+      }
+    }
+
+    dbjp = bcrCounts_pheno(db_gp, inds = "ind", pheno=phenotype_var)
+
+    dbj$w = 0
+    dbj$wn = 0
+    db_gp$w = 0
+    db_gp$wn = 0
+    dbjp$w = 0
+    dbjp$wn = 0
+
+
+    for (i in dbj$ind) {
+        dbj$w[dbj$ind==i] = sum(aff_mtx[i, ]) # sum of affinities for each cell
+        dbj$wn[dbj$ind==i] = sum(aff_mtx[i, ])/sum(aff_mtx) # s
+        dbjp$w[dbjp$ind==i] = sum(aff_mtx[i, ])
+        dbjp$wn[dbjp$ind==i] = sum(aff_mtx[i, ]) / sum(aff_mtx) # sum of affinities for each cell)
+        db_gp$w[db_gp$ind == i] = sum(aff_mtx[i, ]) # sum of affinities for each cell
+        db_gp$wn[db_gp$ind == i] = sum(aff_mtx[i, ]) / sum(aff_mtx)
+      }
+
+
+    ## normalize 0-1
+
+    #dbj$w <- rangeAtoB(dbj$w, 0, 1)
+    #dbj$wn <- dbj$w / sum(dbj$w)
+    #dbjp$wn <- dbjp$w / sum(dbjp$w)
+
+    #db_gp$w <- rangeAtoB(db_gp$w, 0, 1)
+    #dbjp$w <- rangeAtoB(dbjp$w, 0, 1)
+    #diag(aff_mtx) = 1
+
+
+    ## Pi * Pj * Sij, where p is the probability of a cell with BCR sequence x having that sequence
+    ## Useful to correct for cases where more than 1 cell has the same BCR sequence
+    smat = prob_mat * aff_mtx
+
+    dbp =  get_jd(db_gp, pheno = phenotype_var,indVar = indVar)
+    dpp =  get_jd_p(db_gp, pheno = phenotype_var,indVar = indVar)
+    dbp$wn <- dbp$w / sum(dbp$w)
+
+
+
+
+
+    # for (f in unique(db_gp[[phenotype_var]])) {
+    #   ix = dbp$ind[ dbp[[f]] >= 1]
+    #   if (length(ix) == 0) {
+    #     next
+    #     #dgc$intra_clonotypic_entropy_sim[dgc$pheno==f] = 0
+    #   }
+    #   dgc$intra_clonotypic_entropy_sim[dgc$pheno==f] = sum(smat[ix,])
+    # }
+
+
+    # for (f in unique(db_gp[[phenotype_var]])) {
+    #   ix = dbp[[indVar]][ dbp[[f]] >= 1]
+    #   if (length(ix) == 0) {
+    #     next
+    #   }
+    #   pilist = list()
+    #   for (i in ix) {
+    #     # for (j in 1:nrow(dbj)) {
+    #     pilist[i] = sum( prob_mat[i, ]  * aff_mtx[i, ])
+    #   }
+    #   dgc$intra_clonotypic_entropy_sim2[dgc$pheno==f] =  sum(unlist(pilist))
+    # }
+
+   # browser()
+
+    dbp_p = dbp
+
+
+###proportion private to phenotype
+    for (f in unique(db_gp[[phenotype_var]])) {
+      dbp_p[[f]] = dbp_p[[f]] / sum(dbp[[f]])
+    }
+###
+
+    for (f in unique(db_gp[[phenotype_var]])) {
+      ix = dbjp[[indVar]][ dbjp[[phenotype_var]] == f]
+      if (length(ix) == 0) {
+        next
+      }
+      pilist = list()
+      pilist2 = list()
+      ilist = list()
+      pnlist = list()
+      pcslist = list()
+      pslist = list()
+      wlist = list()
+      wnlist = list()
+      pplist = list()
+      for (i in ix) {
+        #for (j in 1:nrow(dbj)) {
+        #dbp[[f]][ix] * dbj$p[j]
+        w = dbj$w[dbj$ind==i]
+        wn = dbj$wn[dbj$ind==i]
+
+        ixx = ((dbjp[[indVar]]==i) & (dbjp[[phenotype_var]]==f))
+        pii = dbjp$p[ixx] * sum(dbjp$p[!ixx]) ## pi * pj
+
+        ## pi and pj within phenotype.
+        piii = dbp_p[[f]][dbp_p$ind==i] * sum(dbp_p[[f]][dbp_p$ind!=i]) ## pi * pj
+
+        #ixp = ((dbjp[[indVar]]!=i) & (dbjp[[phenotype_var]]==f)) ##
+
+        # sum of affinities for each cell
+        #pii = dpp[dpp[[indVar]]==i,][[f]] * sum(dpp[dpp[[indVar]]!=i,][[f]])
+        if (w > 0) {
+          pilist[i] = pii * w
+          ilist[i] = pii * (1/wn)
+          pnlist[i] = pii * wn
+          wnlist[[i]] = wn
+          wlist[[i]] = w
+          pplist[i] = piii * wn
+        } else if (w == 0) {
+          pilist[i] = pii
+          ilist[i] = pii
+          pnlist[i] = pii
+          pplist[i] = piii
+        }
+
+        #pilist[i] = pii * (1 / dbjp$w[ixx])  # pi*pj*wij over i and all js
+        #pilist[i] = sum( prob_mat[i, ]  * sum(aff_mtx[i, ])) # pi*pj*wij over i and all js
+       # pslist[i] = dbjp$w[ixx]
+        pcslist[i] = pii
+      }
+      dgc$intra_clonotypic_entropy_sim[dgc$pheno==f] =  sum(unlist(pilist))
+      dgc$intra_clonotypic_entropy_simn[dgc$pheno==f] =  sum(unlist(pnlist))
+      dgc$intra_clonotypic_entropy_simi[dgc$pheno==f] =  sum(unlist(ilist))
+      dgc$intra_clonotypic_entropy_seqwn[dgc$pheno==f] =  sum(unlist(wnlist))
+      dgc$intra_clonotypic_entropy_seqw[dgc$pheno==f] =  sum(unlist(wlist))
+      dgc$intra_clonotypic_entropy_simn_private[dgc$pheno==f] =  sum(unlist(pplist))
+      #dgc$intra_clonotypic_entropy_sim_cells[dgc$pheno==f] =  1 - sum(unlist(pclist))
+      #dgc$intra_clonotypic_entropy_sim_seq = sum(unlist(pslist))
+      dgc$ncells[dgc$pheno==f] =  sum(dbp[[f]])
+      dgc$pcells[dgc$pheno==f] =  sum(dpp[[f]])
+      dgc$nseqs[dgc$pheno==f] =  nrow(dbp[ix,])
+      dgc$pseqs[dgc$pheno==f] =  nrow(dbp[ix,]) / nrow(dbp)
+      dgc$simpson_index[dgc$pheno==f] = sum(unlist(pcslist))
+      dgc$type[dgc$pheno==f] = "full"
+
+    }
+
+
+    return_list <- list("affinity_mat" = aff_mtx,
+                        "db_clone" = db_gp,
+                        #"g" = g,
+                        "db_pheno"= dgc)
+
+    return(dgc)
+  }
+}
+
+
+
+
+
+
+
+#' Takes a db, a cloneID, and the name of a phenotype variable and returns the affinity matrix, db, and data.frame of per-phenotype diversity metrics for that clone
+#' This variant looks at the global abundance of the clone
+#' @param db db
+#' @param cloneID ID of clone to analyze
+#' @param phenotype_var phenotype variable
+#' @param cell_id cell id
+#' @param clone column name of clone variable in db
+#' @export
+#' @returns list with affinity matrix, db for clone, and data.frame of per-phenotype diversity metrics using Simposon diversity
+intraclonal_simpson_global_p <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=NULL, clone = "clone_id", cdr3=FALSE) {
+  model = "spectral"
+  method = "vj"
+  linkage = c("single", "average", "complete")
+  normalize = "len" ## c("len", "none"),
+  germline = "germline_alignment"
+  sequence = "sequence_alignment"
+  junction = "junction"
+  v_call = "v_call"
+  j_call = "j_call"
+  fields = NULL
+  locus = "locus"
+  only_heavy = TRUE
+  split_light = FALSE
+  targeting_model = shazam::HH_S5F
+  len_limit = NULL
+  first = FALSE
+  #cdr3 = FALSE
+  mod3 = FALSE
+  max_n = 0
+  threshold = 1
+  base_sim = 0.95
+  iter_max = 1000
+  nstart = 1000
+  nproc = 4
+  verbose = FALSE
+  log = NULL
+  summarize_clones = FALSE
+
+  # get clone
+  print(cloneID)
+  db_clone <- as.data.frame(db[db$clone_id == cloneID, ])
+  results_prep = prepare_clone(db = db_clone,
+                               junction = junction, v_call = v_call, j_call = j_call,
+                               first = first, cdr3 = cdr3, fields = fields,
+                               cell_id = cell_id, locus = locus, only_heavy = only_heavy,
+                               mod3 = mod3, max_n = max_n)
+  dbfull = data.table::copy(db)
+  db <- results_prep$db
+  n_rmv_mod3 <- results_prep$n_rmv_mod3
+  n_rmv_cdr3 <- results_prep$n_rmv_cdr3
+  n_rmv_N <- results_prep$n_rmv_N
+  junction_l <- results_prep$junction_l
+  cdr3_col <-  results_prep$cdr3_col
+
+  db_l <- db[db[[locus]] %in% c("IGK", "IGL", "TRA", "TRG"), , drop=F]
+  db <- db[db[[locus]] %in% c("IGH", "TRB", "TRD"), , drop=F]
+  db_gp <- db
+  setDT(db_gp)
+
+  mutabs <- shazam::HH_S5F@mutability
+  # Generated by using Rcpp::compileAttributes() -> do not edit by hand
+  # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
+
+  #Rcpp::sourceCpp("~/Projects/code/scratch/scoper/src/RcppMutation.cpp") # scoper/src/RcppMutation.cpp")
+  #Rcpp::sourceCpp("./src/RcppMutation.cpp")
+
+  n <- nrow(db_gp)
+
+  ### cloning
+  # if (method == "vj") {
+  #   ### check targeting model
+  #   if (!is.null(mutabs)) {
+  #     mutabs <- mutabs@mutability
+  #   } else {
+  #     mutabs <- NULL
+  #   }
+  # get required info based on the method
+  germs <- db_gp[[germline]]
+  seqs <- db_gp[[sequence]]
+  ## accomdate different length sequences for hamming distance
+  juncs <- db_gp[[ifelse(cdr3, cdr3_col, junction)]]
+  juncs <- as.character( set_eq_seqDistance(juncs))
+  junc_length <- unique(stringi::stri_length(juncs))
+  # find unique seqs
+  seqs <- paste(seqs, juncs, germs, sep = "|")
+  df <- data.table::as.data.table(seqs)[, list(list(.I)), by=seqs] %>%
+    tidyr::separate(col = seqs, into = c("seqs_unq", "juncs_unq", "germs_unq"), sep = "\\|")
+  n_unq <- nrow(df)
+  ind_unq <- df$V1
+
+  ## make result df here
+  dgc = data.frame(pheno = unique(db_gp[[phenotype_var]]))
+  dgc[[phenotype_var]] = unique(db_gp[[phenotype_var]])
+  #dgc[[phenotype_var]] = unique(db_gp[[phenotype_var]])
+  dgc$intra_clonotypic_entropy_sim = 0
+  dgc$intra_clonotypic_entropy_sim_cells = 0
+  dgc$intra_clonotypic_entropy_sim_seq = 0
+  dgc$simpson_index = 0
+  dgc$clone_id = cloneID
+  dgc$clone_size = n
+
+  if (n_unq <= 2) {
+    db_gp$ind <- 0
+    db_gp$n_clone = n_unq
+
+    for (i in 1:n_unq) {
+      #idCluster[ind_unq[[i]]] <- idCluster_unq[i]
+      db_gp$ind[ind_unq[[i]]] <- i
+    }
+
+
+    #db_gp$vertex_diversity = 0
+    #db_gp$gll = 0
+
+    ind = "ind"
+
+    #dgc = db_gp %>% dplyr::group_by({{ ind }}, {{ phenotype_var }}) %>%
+    #  dplyr::summarise(n = n())
+
+    #dgc = data.frame(pheno = unique(db_gp[[phenotype_var]]))
+
+
+    #dgc$intra_clonotypic_entropy_sim = 0
+
+    return_list = list("affinity_mat" = NULL,
+                       "db_clone" = db_gp,
+                       # "g" = NULL,
+                       "db_pheno"= dgc)
+
+    return(dgc)
+  } else{
+
+    # find corresponding unique germs and junctions
+    seqs_unq <- df$seqs_unq
+    germs_unq <- df$germs_unq
+    juncs_unq <- df$juncs_unq
+    # calculate unique junctions distance matrix
+    dist_mtx <- alakazam::pairwiseDist(seq = juncs_unq,
+                                       dist_mat = getDNAMatrix(gap = 0))
+    # count mutations from unique sequence imgt
+    results <- pairwiseMutions(germ_imgt = germs_unq,
+                               seq_imgt = seqs_unq,
+                               junc_length = junc_length,
+                               len_limit = len_limit,
+                               cdr3 = cdr3,
+                               mutabs = mutabs)
+    tot_mtx <- results$pairWiseTotalMut
+    sh_mtx <- results$pairWiseSharedMut
+    mutab_mtx <- results$pairWiseMutability
+    # calculate likelihhod matrix
+    lkl_mtx <- likelihoods(tot_mtx = tot_mtx,
+                           sh_mtx = sh_mtx,
+                           mutab_mtx = mutab_mtx)
+    # calculate weighted matrix
+    disim_mtx <- dist_mtx * (1.0 - lkl_mtx)
+
+    if (all(disim_mtx == dist_mtx) | any(rowSums(disim_mtx) == 0)) {
+      # get required info based on the method
+      seqs <- db_gp[[ifelse(cdr3, cdr3_col, junction)]]
+      junc_length <- unique(stringi::stri_length(seqs))
+      # find unique seqs
+      df <- data.table::as.data.table(seqs)[, list(list(.I)), by = seqs]
+      n_unq <- nrow(df)
+      ind_unq <- df$V1
+      seqs_unq <- df$seqs
+      if (n_unq == 1) {
+        return(gdc)
+        #return(list("idCluster" = rep(1, n),
+        #            "n_cluster" = 1,
+        #            "eigen_vals" = rep(0, n)))
+      }
+      # calculate unique seuences distance matrix
+      disim_mtx <- alakazam::pairwiseDist(seq = seqs_unq,
+                                          dist_mat = getDNAMatrix(gap = 0))
     }
     mtx = disim_mtx
     threshold = NULL
@@ -744,14 +1656,7 @@ intraclonal_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_i
     dpp =  get_jd_p(db_gp, pheno = phenotype_var,indVar = indVar)
 
 
-    dgc = data.frame(pheno = unique(db_gp[[phenotype_var]]))
-    #dgc[[phenotype_var]] = unique(db_gp[[phenotype_var]])
-    dgc$intra_clonotypic_entropy_sim = 0
-    dgc$intra_clonotypic_entropy_sim_cells = 0
-    dgc$intra_clonotypic_entropy_sim_seq = 0
-    dgc$simpson_index = 0
-    dgc$clone_id = cloneID
-    dgc$clone_size = n
+
 
     # for (f in unique(db_gp[[phenotype_var]])) {
     #   ix = dbp$ind[ dbp[[f]] >= 1]
@@ -810,9 +1715,12 @@ intraclonal_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_i
                         #"g" = g,
                         "db_pheno"= dgc)
 
-    return(return_list)
+    return(dgc)
   }
 }
+
+
+
 
 
 
@@ -1000,3 +1908,93 @@ global_entropies <- function(db, region="sequence", indVar="ind", phenotype_var 
   # }
   return(dgc)
 }
+
+
+
+
+#' Sequence set distance
+#'
+#' Calculates the distance between pairs of BCRs based on their aligned sequences.
+#' The function assume the sequences are at an even length.
+#' If not the function will pad the sequences with to the longest sequence length with Ns.
+#'
+#' @param    seqs          A character list of the sequences for which the distance is to be calculated.
+#' @param    AA                    Logical (FALSE by default). If to calculate the distance based on the amino acid sequences.
+#'
+#' @return
+#' A \code{list} containing a  \code{matrix} of the computed distances between the alleles pairs and a vector with length adjusted sequences.
+#'
+#' @export
+seqDistance <- function(seqs, AA=FALSE) {
+  ## check if the input is list.
+
+  if (!is.character(seqs))
+    stop("The input germline set is not in a character class.")
+
+  ## check sequences length. If not even pad the sequences to the max length
+  seqs <-
+    gsub("\\s", "N", format(seqs, width = max(nchar(seqs))))
+
+  ## get the distance matrix
+  #seqs = seqs[order(names(seqs))]
+  #### change gaps from '.' to '-'
+  if(AA){
+    seqs <- gsub("X", "-", seqs)
+    #### create a dna string set
+    seqs <- Biostrings::AAStringSet(seqs)
+  }else{
+    seqs <- gsub("[.]", "-", seqs)
+    #### create a dna string set
+    seqs <- Biostrings::DNAStringSet(seqs)
+  }
+
+  #### compute the distance between pairs. penalize for gaps
+  seq_distance <-
+    DECIPHER::DistanceMatrix(
+      seqs,
+      includeTerminalGaps = FALSE,
+      penalizeGapLetterMatches = TRUE,
+      verbose = FALSE
+    )
+
+  return_list = list("distance_mat" = seq_distance,
+                     "sequences" = seqs)
+  return(return_list)
+}
+
+
+
+
+#' Pads the sequences to the longest sequence length with Ns
+#'
+#'
+#' @param    seqs          A character list of the sequences for which the distance is to be calculated.
+#'
+#' @return
+#' A \code{list} containing a  \code{matrix} of the computed distances between the alleles pairs and a vector with length adjusted sequences.
+#'
+#' @export
+set_eq_seqDistance <- function(seqs) {
+  ## check if the input is list.
+
+  if (!is.character(seqs))
+    stop("The input germline set is not in a character class.")
+
+  ## check sequences length. If not even pad the sequences to the max length
+  seqs <-
+    gsub("\\s", "N", format(seqs, width = max(nchar(seqs))))
+
+  ## get the distance matrix
+  #seqs = seqs[order(names(seqs))]
+  #### change gaps from '.' to '-'
+    seqs <- gsub("[.]", "-", seqs)
+    #### create a dna string set
+    seqs <- Biostrings::DNAStringSet(seqs)
+
+  #### compute the distance between pairs. penalize for gaps
+
+  return(seqs)
+}
+
+
+

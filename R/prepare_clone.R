@@ -41,8 +41,8 @@ prepare_clone <- function(db,
       dplyr::filter(!!rlang::sym(junction_l) > 6)
     # add cdr3 column
     db$cdr3_col <- substr(db[[junction]], 4, db[[junction_l]]-3)
-    #cdr3_col <- "cdr3_col"
-    cdr3_col = db$cdr3_col
+    cdr3_col <- "cdr3_col"
+    #cdr3_col = db$cdr3_col
   } else {
     n_rmv_cdr3 <- 0
     cdr3_col <- NA
@@ -112,6 +112,14 @@ bcrCounts <- function(data, inds) {
 }
 
 
+bcrCounts_pheno <- function(data, inds, pheno) {
+  dbj = data %>% dplyr::group_by(.data[[inds]], .data[[pheno]]) %>%
+    dplyr::summarise(n = n())
+  dbj$p = dbj$n / sum(dbj$n)
+  return(dbj)
+}
+
+
 #
 # phenocounts <- function(data, pheno, inds) {
 #   dbp = data %>% dplyr::group_by(.data[[inds]], .data[[pheno]]) %>%
@@ -130,14 +138,14 @@ phenocounts <- function(data, pheno, inds) {
   dbp = data %>% dplyr::group_by(.data[[inds]], .data[[pheno]]) %>%
     dplyr::summarise(n = n()) %>%
     #dplyr::mutate(p = n / sum(n)) %>%
-    tidyr::spread(key = {{pheno}}, value = n, fill=0)
+    tidyr::pivot_wider(names_from = {{pheno}}, values_from = n, fill=0)
   return(dbp)
 }
 
 
 
-get_jd <- function(db, pheno, indVar="ind") {
-  dbp = db %>% dplyr::group_by(.data[[indVar]], .data[[pheno]]) %>%
+get_jd <- function(db, pheno, indVar="ind", w="w") {
+  dbp = db %>% dplyr::group_by(.data[[indVar]], .data[[w]],  .data[[pheno]]) %>%
     dplyr::summarise(n = n()) %>%
     tidyr::spread(key = {{pheno}}, value = n, fill=0)
   return(dbp)
@@ -146,10 +154,9 @@ get_jd <- function(db, pheno, indVar="ind") {
 
 
 
-get_jd_p <- function(db, pheno, indVar="ind") {
-  dbp = db %>% dplyr::group_by(.data[[indVar]], .data[[pheno]]) %>%
+get_jd_p <- function(db, pheno, indVar="ind", w="w") {
+  dbp = db %>% dplyr::group_by(.data[[indVar]], .data[[w]], .data[[pheno]]) %>%
     dplyr::summarise(n = n() )
-
   dbp$p = dbp$n / sum(dbp$n)
   dbp = dbp %>%  tidyr::spread(key = {{pheno}}, value = p, fill=0)
   return(dbp)
