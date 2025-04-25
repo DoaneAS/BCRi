@@ -163,4 +163,19 @@ get_jd_p <- function(db, pheno, indVar="ind", w="w") {
 }
 
 
+makeCloneMat <- function(aff_mtx, db) {
+  dbj = bcrCounts(db, inds = "ind")
+  clone_mat =  aff_mtx
+  for (i in 1:nrow(dbj)) {
+    for (j in 1:nrow(dbj)) {
+      clone_mat[i, j] = db_gp[[clone]][db_gp[["ind"]]==i] != db_gp[[clone]][db_gp[["ind"]]==j]
+    }
+  }
+  aff_mtx[clone_mat] <- 0
+  return(aff_mtx)
+}
+
+
+
+
 
