@@ -834,7 +834,7 @@ intraclonal_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_i
 #' @param clone column name of clone variable in db
 #' @export
 #' @returns data.frame of diversity metrics and phenotype ##list with affinity matrix, db for clone, and data.frame of per-phenotype diversity metrics using Simposon diversity
-weighted_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=NULL, clone = "clone_id", cdr3=FALSE) {
+weighted_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=NULL, clone = "clone_id", cdr3=FALSE, useAffinityWeights=TRUE) {
   model = "spectral"
   method = "vj"
   linkage = c("single", "average", "complete")
@@ -921,17 +921,9 @@ weighted_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=N
   #dgc[[phenotype_var]] = unique(db_gp[[phenotype_var]])
   dgc$rgsw = 0
   dgc$rgsw_norm = 0
-  # dgc$intra_clonotypic_entropy_sim = 0
-  # dgc$intra_clonotypic_entropy_simi = 0
-  # dgc$intra_clonotypic_entropy_simn = NA
-  # dgc$intra_clonotypic_entropy_simn_private = 0
-  # dgc$intra_clonotypic_entropy_sim_cells = 0
-  # dgc$intra_clonotypic_entropy_sim_seq = 0
-  # dgc$intra_clonotypic_entropy_seqw = 0
-  # dgc$intra_clonotypic_entropy_seqwn = NA
-  # dgc$simpson_index = 0
-  # dgc$clone_id = cloneID
-  # dgc$clone_size = n
+  dgc$clone_id = cloneID
+  dgc$clone_size = n
+  dgc$richness <- n_unq
   dgc$type = "limited"
   dgc$wmax = 0
   dgc$beta1 = 0
@@ -1079,8 +1071,16 @@ weighted_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=N
     #                    "db_clone" = db_gp,
     #                    # "g" = NULL,
     #                    "db_pheno"= dgc)
+    #
+    return_list <- list("affinity_mat" = NULL,
+                        "disim_mtx" = NULL,
+                        "db_clone" = NULL,
+                        "jd" = NULL,
+                        "weighted_GS" =  NULL,
+                        "db_pheno"= dgc)
 
-    return(dgc)
+    return(return_list)
+
   } else{
     dgc$type = "full"
 
@@ -1108,133 +1108,6 @@ weighted_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=N
     # calculate weighted matrix
     disim_mtx <- dist_mtx * (1.0 - lkl_mtx)
 
-    # if (all(disim_mtx == dist_mtx) | any(rowSums(disim_mtx) == 0)) {
-    #   # get required info based on the method
-    #
-    #   db_gp$ind <- 0
-    #   db_gp$n_clone = n_unq
-    #
-    #   for (i in 1:n_unq) {
-    #     #idCluster[ind_unq[[i]]] <- idCluster_unq[i]
-    #     db_gp$ind[ind_unq[[i]]] <- i
-    #   }
-    #
-    #   ind = "ind"
-    #   dbjp = bcrCounts_pheno(db_gp, inds = "ind", pheno=phenotype_var)
-    #
-    #
-    #   dbj = bcrCounts(db_gp, inds = "ind")
-    #
-    #   dbj$w = 0
-    #   dbj$wn = 0 #dbj$w / sum(dbj$w)
-    #   db_gp$w = 0
-    #   db_gp$wn = 0
-    #   dbjp$w = 0
-    #   dbjp$wn = 0 #dbjp$w / sum(dbjp$w)
-    #
-    #
-    #
-    #
-    #   dbp =  get_jd(db_gp, pheno = phenotype_var,indVar = indVar)
-    #   dpp =  get_jd_p(db_gp, pheno = phenotype_var,indVar = indVar)
-    #
-    #   dbp$wn <-0 # dbp$w / sum(dbp$w)
-    #
-    #   dbp_p = dbp
-    #
-    #
-    #
-    #
-    #   for (f in unique(db_gp[[phenotype_var]])) {
-    #     dbp_p[[f]] = dbp_p[[f]] / sum(dbp[[f]])
-    #   }
-    #
-    #   for (f in unique(db_gp[[phenotype_var]])) {
-    #     ix = dbjp[[indVar]][ dbjp[[phenotype_var]] == f]
-    #     if (length(ix) == 0) {
-    #       next
-    #     }
-    #     pilist = list()
-    #     pilist2 = list()
-    #     ilist = list()
-    #     pnlist = list()
-    #     pcslist = list()
-    #     pslist = list()
-    #     wlist = list()
-    #     wnlist = list()
-    #     pplist = list()
-    #     rgslist = list()
-    #     for (i in ix) {
-    #       w = dbj$w[dbj$ind==i]
-    #       wn = dbj$wn[dbj$ind==i]
-    #       wnv = dbj$w[dbj$ind==i] * length(ix)
-    #
-    #       ixx = ((dbjp[[indVar]]==i) & (dbjp[[phenotype_var]]==f))
-    #       pii = dbjp$p[ixx] * sum(dbjp$p[!ixx]) ## pi * pj
-    #
-    #       ## pi and pj within phenotype.
-    #       piii = dbp_p[[f]][dbp_p$ind==i] * sum(dbp_p[[f]][dbp_p$ind!=i]) ## pi * pj
-    #
-    #       #ixp = ((dbjp[[indVar]]!=i) & (dbjp[[phenotype_var]]==f)) ##
-    #
-    #       # sum of affinities for each cell
-    #       #pii = dpp[dpp[[indVar]]==i,][[f]] * sum(dpp[dpp[[indVar]]!=i,][[f]])
-    #       if (w > 0) {
-    #         rgslist[i] = pii * wnv
-    #         pilist[i] = pii * w
-    #         ilist[i] = pii * (1/wn)
-    #         pnlist[i] = pii * wn
-    #         wnlist[[i]] = wn
-    #         wlist[[i]] = w
-    #         pplist[i] = piii * wn
-    #       } else if (w == 0) {
-    #         pilist[i] = pii
-    #         ilist[i] = pii
-    #         pnlist[i] = pii
-    #         pplist[i] = piii
-    #         wlist[[i]] = 0
-    #       }
-    #
-    #       #pilist[i] = pii * (1 / dbjp$w[ixx])  # pi*pj*wij over i and all js
-    #       #pilist[i] = sum( prob_mat[i, ]  * sum(aff_mtx[i, ])) # pi*pj*wij over i and all js
-    #       # pslist[i] = dbjp$w[ixx]
-    #       pcslist[i] = pii
-    #     }
-    #     dgc$rgsw[dgc$pheno==f] = sum(unlist(rgslist))
-    #     dgc$rgsw_norm[dgc$pheno==f] = sum(unlist(rgslist)) / max(unlist(wlist))
-    #     dgc$intra_clonotypic_entropy_sim[dgc$pheno==f] =  sum(unlist(pilist))
-    #     dgc$intra_clonotypic_entroy_simn[dgc$pheno==f] =  sum(unlist(pnlist))
-    #     dgc$intra_clonotypic_entropy_simi[dgc$pheno==f] =  sum(unlist(ilist))
-    #     dgc$intra_clonotypic_entropy_simn_private[dgc$pheno==f] =  sum(unlist(pplist))
-    #     #dgc$intra_clonotypic_entropy_sim_cells[dgc$pheno==f] =  1 - sum(unlist(pclist))
-    #     #dgc$intra_clonotypic_entropy_sim_seq = sum(unlist(pslist))
-    #     dgc$ncells[dgc$pheno==f] =  sum(dbp[[f]])
-    #     dgc$pcells[dgc$pheno==f] =  sum(dpp[[f]])
-    #     dgc$nseqs[dgc$pheno==f] =  nrow(dbp[ix,])
-    #     dgc$pseqs[dgc$pheno==f] =  nrow(dbp[ix,]) / nrow(dbp)
-    #     dgc$simpson_index[dgc$pheno==f] = sum(unlist(pcslist))
-    #     dgc$wmax[dgc$pheno==f] = max(unlist(wlist))
-    #
-    #
-    #   }
-    #   #dgc = db_gp %>% dplyr::group_by({{ ind }}, {{ phenotype_var }}) %>%
-    #   #  dplyr::summarise(n = n())
-    #
-    #   #dgc = data.frame(pheno = unique(db_gp[[phenotype_var]]))
-    #
-    #
-    #   #dgc$intra_clonotypic_entropy_sim = 0
-    #   dgc$wclonemax = max(dgc$wmax)
-    #
-    #
-    #   return_list = list("affinity_mat" = NULL,
-    #                      "db_clone" = db_gp,
-    #                      # "g" = NULL,
-    #                      "db_pheno"= dgc)
-    #
-    #   return(dgc)
-    #
-    # }
 
     mtx = disim_mtx
 
@@ -1295,22 +1168,27 @@ weighted_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=N
     dbj$wnv = 0
     db_gp$w = 0
     db_gp$wn = 0
-    db_gp$wnv = 0
     dbjp$w = 0
     dbjp$wn = 0
-    dbjp$wnv = 0
 
+
+    kdmatrix = 1 - aff_mtx
 
     for (i in dbj$ind) {
       #dbj$w[dbj$ind==i] = sum(aff_mtx[i, ]) # sum of affinities for each cell
       #dbj$wn[dbj$ind==i] = sum(aff_mtx[i, ])/sum(aff_mtx) # s
-      dbj$w[dbj$ind==i] = sum(aff_mtx[i, ]) * nrow(dbj) # sum of affinities for each cell
+      dbj$w[dbj$ind==i] = sum(aff_mtx[i, ])  # sum of affinities for each cell
+      dbj$wn[dbj$ind==i] = sum(aff_mtx[i, ]) * nrow(dbj) # sum of affinities for each cell * richness
 
-      dbjp$w[dbjp$ind==i] = sum(aff_mtx[i, ]) * nrow(dbjp)
-      #dbjp$wn[dbjp$ind==i] = sum(aff_mtx[i, ]) / sum(aff_mtx) # sum of affinities for each cell)
-      db_gp$w[db_gp$ind == i] = sum(aff_mtx[i, ]) * nrow(dbjp) # sum of affinities for each cell
+      dbjp$w[dbjp$ind==i] = sum(aff_mtx[i, ])
+      dbjp$wn[dbjp$ind==i] = sum(aff_mtx[i, ]) * nrow(dbjp)
+      db_gp$w[db_gp$ind == i] = sum(aff_mtx[i, ])  # sum of affinities for each cell
+      db_gp$wn[db_gp$ind == i] = sum(aff_mtx[i, ]) * nrow(dbj) # sum of affinities for each cell
       #db_gp$wn[db_gp$ind == i] = sum(aff_mtx[i, ]) / sum(aff_mtx)
     }
+
+
+    wijmat = matrix(0, nrow = nrow(dbj), ncol = nrow(dbj))
 
 
     ## normalize 0-1
@@ -1331,9 +1209,37 @@ weighted_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=N
     dbp =  get_jd(db_gp, pheno = phenotype_var,indVar = indVar)
     dpp =  get_jd_p(db_gp, pheno = phenotype_var,indVar = indVar)
     #dbp$wn <- dbp$w / sum(dbp$w)
+    #
+    dbp = db_gp %>% dplyr::group_by(.data[[indVar]], .data[["w"]],  .data[["wn"]], .data[[phenotype_var]]) %>%
+    dplyr::summarise(n = n()) %>%
+      tidyr::spread(key = {{phenotype_var}}, value = n, fill=0)
 
 
 
+    jdmat <-  db_gp %>% dplyr::group_by(.data[[indVar]], .data[[phenotype_var]]) %>%
+      dplyr::summarise(n = n()) %>%
+      tidyr::spread(key = {{phenotype_var}}, value = n, fill=0) %>%
+      dplyr::ungroup() %>%
+      dplyr::select(-.data[[indVar]]) %>% as.matrix()
+
+
+    regw <- weighted_rich_gini_simpson_affinity_pairs(jdmat,
+                                                      sequence_weights = kdmatrix,
+                                                    #sequence_weights = disim_mtx,
+                                                    affinity_weights = dbp$w,
+                                                    #useRichness= TRUE,
+                                                    #normalize_phenos = TRUE,
+                                                    pheno_weights = NULL,
+                                                    zero_handling = "ignore")
+
+
+
+    rgw <- weighted_rich_gini_simpson_affinity(jdmat,
+                                                      affinity_weights = dbp$w,
+                                                      #useRichness= TRUE,
+                                                      #normalize_phenos = TRUE,
+                                                      #pheno_weights = NULL,
+                                                      zero_handling = "ignore")
 
 
     # for (f in unique(db_gp[[phenotype_var]])) {
@@ -1373,17 +1279,23 @@ weighted_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=N
     for (f in unique(db_gp[[phenotype_var]])) {
       rgslist=list()
       wlist = list()
+      #dlist = list()
+      #dwlist = list()
       ix = dbp_p[[indVar]]
       if (sum(dbp_p[[f]]) == 0) {
         next
       }
 
       for (i in ix) {
-        jx = setdiff(ix, i)
-        w = dbp_p$w[i]
-        pj = sum(dbp_p[[f]][jx])
-        rgslist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * w
-        wlist[i] = w
+        #jx = setdiff(ix, i)
+        wn = dbp_p$wn[i]
+        #d = dbp_p$d[i]
+        #dw = dbp_p$dw[i]
+        #pj = sum(dbp_p[[f]][jx])
+        rgslist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * wn
+        wlist[i] = wn
+        #dlist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * d
+       # dwlist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * dw
       }
 
       if (sum(unlist(rgslist)) == 0) {
@@ -1392,10 +1304,19 @@ weighted_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=N
 
       dgc$rgsw[dgc$pheno==f] =  sum(unlist(rgslist))
       dgc$wmax[dgc$pheno==f] = max(unlist(wlist))
+
+      #dgc$rgsw_d[dgc$pheno==f] =  sum(unlist(dlist))
+     # dgc$rgsw_dw[dgc$pheno==f] =  sum(unlist(dwlist))
     }
 
     dgc$beta1 = dgc$wmax * (1 - (1/n_unq))
+    #dgc$dmax = max(dbp_p$d)
+    #dgc$dwmax = max(dbp_p$dw)
     dgc$rgsw_norm = dgc$rgsw / dgc$beta1
+
+    #dgc$rgsw_d_norm = dgc$rgsw_d / dgc$beta1
+    #dgc$rgsw_dw_norm = dgc$rgsw_dw / (dgc$dwmax * (1 - (1/n_unq)))
+    #dgc$rgsw_d_norm = dgc$rgsw_dw / (dgc$dmax * (1 - (1/n_unq)))
 
 
 
@@ -1488,14 +1409,21 @@ weighted_simpson <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=N
     #}
 
 
-    # return_list <- list("affinity_mat" = aff_mtx,
-    #                     "db_clone" = db_gp,
-    #                     #"g" = g,
-    #                     "db_pheno"= dgc)
 
     setDT(dgc)
     dgc <- dgc[rgsw >0,]
-    return(dgc)
+
+    return_list <- list("affinity_mat" = aff_mtx,
+                        "disim_mtx" = disim_mtx,
+                         "db_clone" = db_gp,
+                        "jd" = dbp,
+                        "weighted_RGS_pairs" =  regw,
+                        "weighted_RGS" = rgw,
+                         "db_pheno"= dgc)
+
+    #setDT(dgc)
+    #dgc <- dgc[rgsw >0,]
+    return(return_list)
   }
 }
 
@@ -2099,6 +2027,472 @@ weighted_simpson_global <- function(db, cloneID=NULL, phenotype_var="subset", ce
 
     return(dgc)
 }
+
+
+
+
+
+
+
+
+
+#' Takes a db, a cloneID, and the name of a phenotype variable and returns the affinity matrix, db, and data.frame of per-phenotype diversity metrics for that clone
+#'
+#' @param db db
+#' @param cloneID ID of clone to analyze
+#' @param phenotype_var phenotype variable
+#' @param cell_id cell id
+#' @param clone column name of clone variable in db
+#' @export
+#' @returns data.frame of diversity metrics and phenotype ##list with affinity matrix, db for clone, and data.frame of per-phenotype diversity metrics using Simposon diversity
+getRGSw <- function(db, cloneID=NULL, phenotype_var="subset", cell_id=NULL, clone = "clone_id", cdr3=FALSE) {
+  model = "spectral"
+  method = "vj"
+  linkage = c("single", "average", "complete")
+  normalize = "len" ## c("len", "none"),
+  germline = "germline_alignment"
+  sequence = "sequence_alignment"
+  junction = "junction"
+  v_call = "v_call"
+  j_call = "j_call"
+  fields = NULL
+  locus = "locus"
+  only_heavy = TRUE
+  split_light = FALSE
+  targeting_model = shazam::HH_S5F
+  len_limit = NULL
+  first = FALSE
+  #cdr3 = FALSE
+  mod3 = FALSE
+  max_n = 0
+  threshold = 1
+  base_sim = 0.95
+  iter_max = 1000
+  nstart = 1000
+  nproc = 4
+  verbose = FALSE
+  log = NULL
+  summarize_clones = FALSE
+  indVar = "ind"
+
+  # get clone
+  print(cloneID)
+  db_clone <- as.data.frame(db[db$clone_id == cloneID, ])
+  results_prep = prepare_clone(db = db_clone,
+                               junction = junction, v_call = v_call, j_call = j_call,
+                               first = first, cdr3 = cdr3, fields = fields,
+                               cell_id = cell_id, locus = locus, only_heavy = only_heavy,
+                               mod3 = mod3, max_n = max_n)
+  dbfull = data.table::copy(db)
+  db <- results_prep$db
+  n_rmv_mod3 <- results_prep$n_rmv_mod3
+  n_rmv_cdr3 <- results_prep$n_rmv_cdr3
+  n_rmv_N <- results_prep$n_rmv_N
+  junction_l <- results_prep$junction_l
+  cdr3_col <-  results_prep$cdr3_col
+
+  db_l <- db[db[[locus]] %in% c("IGK", "IGL", "TRA", "TRG"), , drop=F]
+  db <- db[db[[locus]] %in% c("IGH", "TRB", "TRD"), , drop=F]
+  db_gp <- db
+
+  mutabs <- shazam::HH_S5F@mutability
+  # Generated by using Rcpp::compileAttributes() -> do not edit by hand
+  # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
+
+  #Rcpp::sourceCpp("~/Projects/code/scratch/scoper/src/RcppMutation.cpp") # scoper/src/RcppMutation.cpp")
+  #Rcpp::sourceCpp("./src/RcppMutation.cpp")
+
+  n <- nrow(db_gp)
+
+
+  germs <- db_gp[[germline]]
+  seqs <- db_gp[[sequence]]
+  ## accomdate different length sequences for hamming distance
+  juncs <- db_gp[[ifelse(cdr3, cdr3_col, junction)]]
+  #juncs <- as.character( set_eq_seqDistance(juncs))
+  junc_length <- unique(stringi::stri_length(juncs))
+  if (length(junc_length) > 1) {
+    juncs <- as.character( set_eq_seqDistance(juncs))
+    junc_length <- unique(stringi::stri_length(juncs))
+  }
+
+
+  #juncs <- as.character( set_eq_seqDistance(juncs))
+  # find unique seqs
+  #.I = NULL
+  seqs <- paste(seqs, juncs, germs, sep = "|")
+  df <- data.table::as.data.table(seqs)[, list(list(.I)), by=seqs] %>%
+    tidyr::separate(col = seqs, into = c("seqs_unq", "juncs_unq", "germs_unq"), sep = "\\|")
+  n_unq <- nrow(df)
+  ind_unq <- df$V1
+
+  ## make result df here
+  dgc = data.frame(pheno = unique(db_gp[[phenotype_var]]))
+  dgc[[phenotype_var]] = unique(db_gp[[phenotype_var]])
+  #dgc[[phenotype_var]] = unique(db_gp[[phenotype_var]])
+  dgc$rgsw = 0
+  dgc$rgsw_d = 0
+  dgc$rgsw_dw = 0
+  dgc$rgsw_norm = 0
+  dgc$rgsw_d_norm = 0
+  dgc$rgsw_dw_norm = 0
+  dgc$type = "limited"
+  dgc$wmax = 0
+  dgc$beta1 = 0
+
+  if (n_unq <= 2) {
+
+    return(dgc)
+
+  } else{
+    dgc$type = "full"
+
+    # find corresponding unique germs and junctions
+    seqs_unq <- df$seqs_unq
+    germs_unq <- df$germs_unq
+    juncs_unq <- df$juncs_unq
+    # calculate unique junctions distance matrix
+    dist_mtx <- alakazam::pairwiseDist(seq = juncs_unq,
+                                       dist_mat = getDNAMatrix(gap = 0))
+    # count mutations from unique sequence imgt
+    results <- pairwiseMutions(germ_imgt = germs_unq,
+                               seq_imgt = seqs_unq,
+                               junc_length = junc_length,
+                               len_limit = len_limit,
+                               cdr3 = cdr3,
+                               mutabs = mutabs)
+    tot_mtx <- results$pairWiseTotalMut
+    sh_mtx <- results$pairWiseSharedMut
+    mutab_mtx <- results$pairWiseMutability
+    # calculate likelihhod matrix
+    lkl_mtx <- likelihoods(tot_mtx = tot_mtx,
+                           sh_mtx = sh_mtx,
+                           mutab_mtx = mutab_mtx)
+    # calculate weighted matrix
+    disim_mtx <- dist_mtx * (1.0 - lkl_mtx)
+
+
+
+    mtx = disim_mtx
+
+    nearest_dist <- apply(mtx, 2,  function(x) {
+      gt0 <- which(x > 0)
+      if (length(gt0) != 0) { min(x[gt0]) } else { NA }
+    })
+
+
+    krnl_mtx <- krnlMtxGenerator(mtx = mtx)
+    aff_mtx <- krnl_mtx
+    ### use only for global
+    # aff_mtx <- makeAffinity(mtx_o = mtx,
+    #                       mtx_k = krnl_mtx,
+    #                      thd = max(nearest_dist, na.rm = T))
+
+
+
+    threshold = NULL
+    base_sim = 0.95
+    iter_max = 1000
+    nstart = 1000
+    #{
+    ### constants
+    n <- nrow(mtx)
+    bs <- (1 - base_sim)*junc_length
+    off_diags_nuq <- unique(mtx[row(mtx) != col(mtx)])
+
+
+    #aff_mtx <- krnl_mtx
+
+    aff_mtx[is.na(aff_mtx)] <- 0
+
+    ## return clone db with unique seq identifier
+    db_gp$ind <- 0
+
+    for (i in 1:n_unq) {
+      #idCluster[ind_unq[[i]]] <- idCluster_unq[i]
+      db_gp$ind[ind_unq[[i]]] <- i
+    }
+
+    diag(aff_mtx) = 1
+
+    dbj = bcrCounts(db_gp, inds = "ind")
+    prob_mat =  aff_mtx
+    prob_mat[] <- 0
+
+
+    dbjp = bcrCounts_pheno(db_gp, inds = "ind", pheno=phenotype_var)
+
+    dbj$w = 0
+    dbj$d = 0
+    dbj$dw = 0
+    dbj$wnv = 0
+    db_gp$w = 0
+    db_gp$d = 0
+    db_gp$dw = 0
+    dbjp$w = 0
+    dbjp$d = 0
+    dbjp$dw = 0
+
+
+    kdmatrix = 1 - aff_mtx
+
+    for (i in dbj$ind) {
+      #dbj$w[dbj$ind==i] = sum(aff_mtx[i, ]) # sum of affinities for each cell
+      #dbj$wn[dbj$ind==i] = sum(aff_mtx[i, ])/sum(aff_mtx) # s
+      dbj$w[dbj$ind==i] = sum(aff_mtx[i, ]) * nrow(dbj) # sum of affinities for each cell
+      dbj$d[dbj$ind==i] = sum(mtx[i, ]) * nrow(dbj) # sum of affinities for each cell
+      dbj$dw[dbj$ind==i] = sum(kdmatrix[i, ]) * nrow(dbj) # sum of affinities for each cell
+
+      dbjp$w[dbjp$ind==i] = sum(aff_mtx[i, ]) * nrow(dbjp)
+      dbjp$d[dbjp$ind==i] = sum(mtx[i, ]) * nrow(dbjp) # sum of affinities for each cell
+      dbjp$dw[dbjp$ind==i] = sum(kdmatrix[i, ]) * nrow(dbj) # sum of affinities for each cell
+      #dbjp$wn[dbjp$ind==i] = sum(aff_mtx[i, ]) / sum(aff_mtx) # sum of affinities for each cell)
+      db_gp$w[db_gp$ind == i] = sum(aff_mtx[i, ]) * nrow(dbj) # sum of affinities for each cell
+      db_gp$d[db_gp$ind == i] = sum(mtx[i, ]) * nrow(dbj) # sum of affinities for each cell
+      db_gp$dw[db_gp$ind == i] = sum(kdmatrix[i, ]) * nrow(dbj) # sum of affinities for each cell
+      #db_gp$wn[db_gp$ind == i] = sum(aff_mtx[i, ]) / sum(aff_mtx)
+    }
+
+
+    wijmat = matrix(0, nrow = nrow(dbj), ncol = nrow(dbj))
+
+    for (i in dbj$ind) {
+      for (j in dbj$ind) {
+        wijmat[i, j] = dbj$p[i] * dbj$p[j]
+      }
+#dbj$w[dbj$ind==i] = sum(aff_mtx[i, ]) # sum of affinities for each cell
+#dbj$wn[dbj$ind==i] = sum(aff_mtx[i, ])/sum(aff_mtx) # s
+dbj$w[dbj$ind==i] = sum(aff_mtx[i, ]) * nrow(dbj) # sum of affinities for each cell
+dbj$d[dbj$ind==i] = sum(mtx[i, ]) * nrow(dbj) # sum of affinities for each cell
+dbj$dw[dbj$ind==i] = sum(kdmatrix[i, ]) * nrow(dbj) # sum of affinities for each cell
+
+dbjp$w[dbjp$ind==i] = sum(aff_mtx[i, ]) * nrow(dbjp)
+dbjp$d[dbjp$ind==i] = sum(mtx[i, ]) * nrow(dbjp) # sum of affinities for each cell
+dbjp$dw[dbjp$ind==i] = sum(kdmatrix[i, ]) * nrow(dbj) # sum of affinities for each cell
+#dbjp$wn[dbjp$ind==i] = sum(aff_mtx[i, ]) / sum(aff_mtx) # sum of affinities for each cell)
+db_gp$w[db_gp$ind == i] = sum(aff_mtx[i, ]) * nrow(dbj) # sum of affinities for each cell
+db_gp$d[db_gp$ind == i] = sum(mtx[i, ]) * nrow(dbj) # sum of affinities for each cell
+db_gp$dw[db_gp$ind == i] = sum(kdmatrix[i, ]) * nrow(dbj) # sum of affinities for each cell
+#db_gp$wn[db_gp$ind == i] = sum(aff_mtx[i, ]) / sum(aff_mtx)
+  }
+
+
+    ## normalize 0-1
+
+    #dbj$w <- rangeAtoB(dbj$w, 0, 1)
+    #dbj$wn <- dbj$w / sum(dbj$w)
+    #dbjp$wn <- dbjp$w / sum(dbjp$w)
+
+    #db_gp$w <- rangeAtoB(db_gp$w, 0, 1)
+    #dbjp$w <- rangeAtoB(dbjp$w, 0, 1)
+    #diag(aff_mtx) = 1
+
+
+    ## Pi * Pj * Sij, where p is the probability of a cell with BCR sequence x having that sequence
+    ## Useful to correct for cases where more than 1 cell has the same BCR sequence
+    smat = prob_mat * aff_mtx
+
+    dbp =  get_jd(db_gp, pheno = phenotype_var,indVar = indVar)
+    dpp =  get_jd_p(db_gp, pheno = phenotype_var,indVar = indVar)
+    #dbp$wn <- dbp$w / sum(dbp$w)
+    #
+    dbp = db_gp %>% dplyr::group_by(.data[[indVar]], .data[["w"]], .data[["d"]], .data[["dw"]],  .data[[phenotype_var]]) %>%
+      dplyr::summarise(n = n()) %>%
+      tidyr::spread(key = {{phenotype_var}}, value = n, fill=0)
+
+    jdmat <-  db_gp %>% dplyr::group_by(.data[[indVar]], .data[["w"]], .data[[phenotype_var]]) %>%
+      dplyr::summarise(n = n()) %>%
+      tidyr::spread(key = {{phenotype_var}}, value = n, fill=0) %>%
+      dplyr::select(-.data[[indVar]]) %>% as.martix()
+
+
+    regw <- weighted_rich_gini_simpson_conservation(jdmat,
+                                                    sequence_weights = disim_mtx,
+                                                    conservation_weights = dbp$w,
+                                                    #useRichness= TRUE,
+                                                    #normalize_phenos = TRUE,
+                                                    #pheno_weights = NULL,
+                                                    zero_handling = "ignore")
+
+
+
+    # for (f in unique(db_gp[[phenotype_var]])) {
+    #   ix = dbp$ind[ dbp[[f]] >= 1]
+    #   if (length(ix) == 0) {
+    #     next
+    #     #dgc$intra_clonotypic_entropy_sim[dgc$pheno==f] = 0
+    #   }
+    #   dgc$intra_clonotypic_entropy_sim[dgc$pheno==f] = sum(smat[ix,])
+    # }
+
+
+    # for (f in unique(db_gp[[phenotype_var]])) {
+    #   ix = dbp[[indVar]][ dbp[[f]] >= 1]
+    #   if (length(ix) == 0) {
+    #     next
+    #   }
+    #   pilist = list()
+    #   for (i in ix) {
+    #     # for (j in 1:nrow(dbj)) {
+    #     pilist[i] = sum( prob_mat[i, ]  * aff_mtx[i, ])
+    #   }
+    #   dgc$intra_clonotypic_entropy_sim2[dgc$pheno==f] =  sum(unlist(pilist))
+    # }
+
+    # browser()
+
+    dbp_p = dbp
+
+
+    ###proportion private to phenotype
+    for (f in unique(db_gp[[phenotype_var]])) {
+      dbp_p[[f]] = dbp_p[[f]] / sum(dbp_p[[f]])
+    }
+    ###
+
+    for (f in unique(db_gp[[phenotype_var]])) {
+      rgslist=list()
+      wlist = list()
+      dlist = list()
+      dwlist = list()
+      ix = dbp_p[[indVar]]
+      if (sum(dbp_p[[f]]) == 0) {
+        next
+      }
+
+      for (i in ix) {
+        jx = setdiff(ix, i)
+        w = dbp_p$w[i]
+        d = dbp_p$d[i]
+        dw = dbp_p$dw[i]
+        pj = sum(dbp_p[[f]][jx])
+        rgslist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * w
+        wlist[i] = w
+        dlist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * d
+        dwlist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * dw
+      }
+
+      if (sum(unlist(rgslist)) == 0) {
+        next
+      }
+
+      dgc$rgsw[dgc$pheno==f] =  sum(unlist(rgslist))
+      dgc$wmax[dgc$pheno==f] = max(unlist(wlist))
+
+      dgc$rgsw_d[dgc$pheno==f] =  sum(unlist(dlist))
+      dgc$rgsw_dw[dgc$pheno==f] =  sum(unlist(dwlist))
+    }
+
+    dgc$beta1 = dgc$wmax * (1 - (1/n_unq))
+    dgc$dmax = max(dbp_p$d)
+    dgc$dwmax = max(dbp_p$dw)
+    dgc$rgsw_norm = dgc$rgsw / dgc$beta1
+
+    dgc$rgsw_d_norm = dgc$rgsw_d / dgc$beta1
+    dgc$rgsw_dw_norm = dgc$rgsw_dw / (dgc$dwmax * (1 - (1/n_unq)))
+    dgc$rgsw_d_norm = dgc$rgsw_dw / (dgc$dmax * (1 - (1/n_unq)))
+
+
+
+    #   if (length(ix) == 0) {
+    #     next
+    #   }
+    #   pilist = list()
+    #   pilist2 = list()
+    #   ilist = list()
+    #   pnlist = list()
+    #   pcslist = list()
+    #   pslist = list()
+    #   wlist = list()
+    #   wnlist = list()
+    #   pplist = list()
+    # }
+    #
+    # for (f in unique(db_gp[[phenotype_var]])) {
+    #   ix = dbjp[[indVar]][ dbjp[[phenotype_var]] == f]
+    #   if (length(ix) == 0) {
+    #     next
+    #   }
+    #   rgslist=list()
+    #   wnvlist=list()
+    #   pilist = list()
+    #   pilist2 = list()
+    #   ilist = list()
+    #   pnlist = list()
+    #   pcslist = list()
+    #   pslist = list()
+    #   wlist = list()
+    #   wnlist = list()
+    #   pplist = list()
+    #   for (i in ix) {
+    #     #for (j in 1:nrow(dbj)) {
+    #     #dbp[[f]][ix] * dbj$p[j]
+    #     w = dbj$w[dbj$ind==i]
+    #     #wn = dbj$wn[dbj$ind==i]
+    #     #wnv = dbj$wnv[dbj$ind==i]
+    #
+    #     ixx = ((dbjp[[indVar]]==i) & (dbjp[[phenotype_var]]==f))
+    #     pii = dbjp$p[ixx] * sum(dbjp$p[!ixx]) ## pi * pj
+    #
+    #     ## pi and pj within phenotype.
+    #     piii = dbp_p[[f]][dbp_p$ind==i] * sum(dbp_p[[f]][dbp_p$ind!=i]) ## pi * pj
+    #
+    #     #ixp = ((dbjp[[indVar]]!=i) & (dbjp[[phenotype_var]]==f)) ##
+    #
+    #     # sum of affinities for each cell
+    #     #pii = dpp[dpp[[indVar]]==i,][[f]] * sum(dpp[dpp[[indVar]]!=i,][[f]])
+    #     if (w > 0) {
+    #       pilist[i] = pii * w
+    #       ilist[i] = pii * (1/wn)
+    #       pnlist[i] = pii * wn
+    #       wnlist[[i]] = wn
+    #       wlist[[i]] = w
+    #       pplist[i] = piii * wn
+    #       wnvlist[[i]] = wnv
+    #       rgslist[i] = pii * wnv
+    #     } else if (w == 0) {
+    #       pilist[i] = pii
+    #       ilist[i] = pii
+    #       pnlist[i] = pii
+    #       pplist[i] = piii
+    #       wnvlist[[i]] = 0
+    #     }
+    #
+    #     #pilist[i] = pii * (1 / dbjp$w[ixx])  # pi*pj*wij over i and all js
+    #     #pilist[i] = sum( prob_mat[i, ]  * sum(aff_mtx[i, ])) # pi*pj*wij over i and all js
+    #     # pslist[i] = dbjp$w[ixx]
+    #     pcslist[i] = pii
+    #   }
+    # dgc$rgsw[dgc$pheno==f] =  sum(unlist(rgslist))
+    # dgc$intra_clonotypic_entropy_sim[dgc$pheno==f] =  sum(unlist(pilist))
+    # dgc$intra_clonotypic_entropy_simn[dgc$pheno==f] =  sum(unlist(pnlist))
+    # dgc$intra_clonotypic_entropy_simi[dgc$pheno==f] =  sum(unlist(ilist))
+    # dgc$intra_clonotypic_entropy_seqwn[dgc$pheno==f] =  sum(unlist(wnlist))
+    # dgc$intra_clonotypic_entropy_seqw[dgc$pheno==f] =  sum(unlist(wlist))
+    # dgc$intra_clonotypic_entropy_simn_private[dgc$pheno==f] =  sum(unlist(pplist))
+    # #dgc$intra_clonotypic_entropy_sim_cells[dgc$pheno==f] =  1 - sum(unlist(pclist))
+    # #dgc$intra_clonotypic_entropy_sim_seq = sum(unlist(pslist))
+    # dgc$ncells[dgc$pheno==f] =  sum(dbp[[f]])
+    # dgc$pcells[dgc$pheno==f] =  sum(dpp[[f]])
+    # dgc$nseqs[dgc$pheno==f] =  nrow(dbp[ix,])
+    # dgc$pseqs[dgc$pheno==f] =  nrow(dbp[ix,]) / nrow(dbp)
+    # dgc$simpson_index[dgc$pheno==f] = sum(unlist(pcslist))
+    # dgc$type[dgc$pheno==f] = "full"
+    # dgc$wmax[dgc$pheno==f] = max(unlist(wnvlist))
+
+    #}
+
+
+    # return_list <- list("affinity_mat" = aff_mtx,
+    #                     "db_clone" = db_gp,
+    #                     #"g" = g,
+    #                     "db_pheno"= dgc)
+
+    setDT(dgc)
+    dgc <- dgc[rgsw >0,]
+    return(dgc)
+}
+  }
 
 
 
