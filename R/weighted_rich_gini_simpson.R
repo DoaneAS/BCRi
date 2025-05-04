@@ -130,7 +130,8 @@ weighted_rich_gini_simpson_affinity_pairs <- function(abundance_matrix,
   gsw_indices <- numeric(n_phenos)
   rgsw_indices <- numeric(n_phenos)
   rgs_indices <- numeric(n_phenos)
-
+  pheno_indices <- numeric(n_phenos)
+  weight_indices = numeric(n_phenos)
   vgsw_indices <- numeric(n_phenos)
   vrgsw_indices <- numeric(n_phenos)
   vrgs_indices <- numeric(n_phenos)
