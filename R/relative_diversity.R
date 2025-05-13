@@ -55,7 +55,7 @@ similarity_sensitive_entropy <- function(probabilities, similarity_matrix,
                                          base = exp(1),
                                          normalize_similarity = FALSE,
                                          optimization_method = c("numerical", "analytical"),
-                                         check_inputs = TRUE,
+                                         check_inputs = TRUE,computeMax = FALSE,
                                          return_optimal_probs = FALSE) {
 
   optimization_method <- match.arg(optimization_method)
@@ -146,6 +146,9 @@ similarity_sensitive_entropy <- function(probabilities, similarity_matrix,
   #--------------------------------------------------------------------------
   # Find the maximum possible similarity-sensitive Shannon entropy
   #--------------------------------------------------------------------------
+
+  if (computeMax){
+
 
   # For standard Shannon entropy (identity similarity matrix),
   # the maximum is achieved with uniform distribution
@@ -241,6 +244,16 @@ similarity_sensitive_entropy <- function(probabilities, similarity_matrix,
 
   if (return_optimal_probs) {
     result$optimal_probs <- optimal_probs
+  }
+  } else {
+    result <- list(
+      entropy = entropy,
+      diversity = diversity,
+      max_entropy = NA,
+      max_diversity = NA,
+      normalized_entropy = NA,
+      normalized_diversity = NA
+    )
   }
 
   return(result)
