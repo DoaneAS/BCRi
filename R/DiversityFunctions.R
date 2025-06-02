@@ -2017,8 +2017,9 @@ repartition <- function(meta, new_partition) {
 #' @export
 #'
 repartition_boot <- function(jdmat, aff_mat, nboot, qs) {
-  make_p <- function(partition, s) {
-    new_partition <- partition[mosaic::resample(row.names(partition)), ]
+
+  make_p <- function(cids, partition, s) {
+    new_partition <- partition[cids, ]
     row.names(new_partition) <- row.names(partition)
     new_meta <- metacommunity(new_partition, s)
     norm_sub_alpha(new_meta, qs=qs)
@@ -2031,13 +2032,9 @@ repartition_boot <- function(jdmat, aff_mat, nboot, qs) {
   meta <- rdiversity::metacommunity(jdmat,s)
 
   partition <- meta@type_abundance
-
-  partition <- meta@type_abundance
   s <- similarity(meta@similarity)
-  boots = mosaic::do(nboot)* make_p(partition, s)
-
-
-   return(boots)
+  boots = mosaic::do(nboot)* make_p(mosaic::resample(row.names(partition)), partition, s)
+  return(boots)
 }
 
 

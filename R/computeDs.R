@@ -106,15 +106,15 @@ computeDs_shuffle <- function(jdmat, aff_mat=NULL, qs=0:2){
 
 
 
-makeBoot <- function(db, nboot=100, aff_mat, min_n=100, max_n=NULL, group=phenotype_var, qs=qs, uniform=TRUE) {
+makeBoot <- function(db, jdmat, aff_mat, group, qs, nboot=100, clone="cid", min_n=10, max_n=NULL, uniform=TRUE) {
   count_col = "seq_count"
   # Tabulate clonal abundance
-  clone_tab <- alakazam::countClones(db,  clone="cid", groups=group) %>%
+  clone_tab <- alakazam::countClones(db,  clone=clone, groups=group) %>%
     dplyr::mutate(clone_count=!!rlang::sym(count_col))
   group_tab <- clone_tab %>%
     group_by(!!rlang::sym(group)) %>%
     dplyr::summarize(count=sum(!!rlang::sym("clone_count"), na.rm=TRUE)) %>%
-    rename(group=!!rlang::sym(phenotype_var))
+    dplyr::rename(group=!!rlang::sym(group))
   group_all <- as.character(group_tab$group)
   group_tab <- group_tab[group_tab$count >= min_n, ]
   group_keep <- as.character(group_tab$group)
@@ -137,7 +137,7 @@ makeBoot <- function(db, nboot=100, aff_mat, min_n=100, max_n=NULL, group=phenot
       group_tab <- clone_tab %>%
         group_by(!!rlang::sym(group)) %>%
         dplyr::summarize(count=sum(!!rlang::sym("clone_count"), na.rm=TRUE)) %>%
-        rename(group=!!rlang::sym(group))
+        dplyr::rename(group=!!rlang::sym(group))
     } else {
       group_tab <- data.frame(v="All", count=sum(clone_tab$clone_count, na.rm=T))
       names(group_tab)[1] <- "group"
@@ -166,7 +166,6 @@ makeBoot <- function(db, nboot=100, aff_mat, min_n=100, max_n=NULL, group=phenot
 
 ## function that TAKES the bootstrapped sample
 bootD <- function(cids, jdmat, aff_mat, f, qs) {
-  jdmat[cids,]
 
   s <- rdiversity::similarity(aff_mat[cids,cids], "genetic")
 
