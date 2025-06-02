@@ -2,10 +2,9 @@
 #' @title Compute diversity metrics
 #' @export
 computeDs <- function(jdmat, aff_mat=NULL, qs=0:2){
-  require("rdiversity")
   if (is.null(aff_mat)) {
    #stop("aff_mat is NULL")
-    m <- rdiversity::metacommunity(jdmat)
+    m <- metacommunity(jdmat)
     d1 = raw_sub_alpha(m, qs=qs)
     d2 = norm_sub_alpha(m, qs=qs)
     d3 = raw_sub_beta(m, qs=qs)
@@ -15,9 +14,9 @@ computeDs <- function(jdmat, aff_mat=NULL, qs=0:2){
     #d6 = norm_meta_alpha(m, qs=0:2)
     dout <- rbind(d1, d2, d3, d4)
   } else {
-  s <- rdiversity::similarity(aff_mat, "genetic")
+  s <- similarity(aff_mat, "genetic")
 
-  m <- rdiversity::metacommunity(jdmat,s)
+  m <- metacommunity(jdmat,s)
 
   d1 = raw_sub_alpha(m, qs=qs)
   d2 = norm_sub_alpha(m, qs=qs)
@@ -37,10 +36,9 @@ computeDs <- function(jdmat, aff_mat=NULL, qs=0:2){
 #' @title Compute diversity metrics
 #' @export
 computeMetaDs <- function(jdmat, aff_mat=NULL, qs=0:2){
-  require("rdiversity")
   if (is.null(aff_mat)) {
    #stop("aff_mat is NULL")
-    m <- rdiversity::metacommunity(jdmat)
+    m <- metacommunity(jdmat)
     d1 <- raw_meta_alpha(m, qs=qs)
     d2 <- norm_meta_alpha(m, qs=qs)
     d3 <- raw_meta_beta(m, qs=qs)
@@ -50,9 +48,9 @@ computeMetaDs <- function(jdmat, aff_mat=NULL, qs=0:2){
     #d6 = norm_meta_alpha(m, qs=0:2)
     dout <- rbind(d1, d2, d3, d4)
   } else {
-  s <- rdiversity::similarity(aff_mat, "genetic")
+  s <- similarity(aff_mat, "genetic")
 
-  m <- rdiversity::metacommunity(jdmat,s)
+  m <- metacommunity(jdmat,s)
 
   d1 <- raw_meta_alpha(m, qs=qs)
   d2 <- norm_meta_alpha(m, qs=qs)
@@ -72,7 +70,6 @@ computeMetaDs <- function(jdmat, aff_mat=NULL, qs=0:2){
 
 #' @export
 computeDs_shuffle <- function(jdmat, aff_mat=NULL, qs=0:2){
-  require("rdiversity")
   if (is.null(aff_mat)) {
     #stop("aff_mat is NULL")
     m <- metacommunity(jdmat)
@@ -86,7 +83,7 @@ computeDs_shuffle <- function(jdmat, aff_mat=NULL, qs=0:2){
     #d6 = norm_meta_alpha(m, qs=0:2)
     dout <- rbind(d1, d2, d3, d4)
   } else {
-    s <- rdiversity::similarity(aff_mat, "genetic")
+    s <- similarity(aff_mat, "genetic")
 
     m <- metacommunity(jdmat,s)
     m <- repartition(m)
@@ -167,9 +164,9 @@ makeBoot <- function(db, jdmat, aff_mat, group, qs, nboot=100, clone="cid", min_
 ## function that TAKES the bootstrapped sample
 bootD <- function(cids, jdmat, aff_mat, f, qs) {
 
-  s <- rdiversity::similarity(aff_mat[cids,cids], "genetic")
+  s <- similarity(aff_mat[cids,cids], "genetic")
 
-  m <- rdiversity::metacommunity(jdmat[cids,f],s)
+  m <- metacommunity(jdmat[cids,f],s)
   d2 = norm_sub_alpha(m, qs=qs)
   return(d2)
 }
