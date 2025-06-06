@@ -640,6 +640,7 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
                         "disim_mtx" = disim_mtx,
                         "db_clone" = db_gp,
                         "jd" = dbp,
+                        "P" = jdmat,
                         #"weighted_RGS_pairs" =  regw,
                         #"weighted_RGS" = rgw,
                         "db_pheno"= dgc,
