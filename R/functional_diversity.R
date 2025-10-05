@@ -11,7 +11,7 @@
 #' @returns data.frame of diversity metrics and phenotype ##list with affinity matrix, db for clone, and data.frame of per-phenotype diversity metrics using Simposon diversity
 functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", phenotype_reference=NULL,  cell_id=NULL,similarity=TRUE,
                                group = "subject_id", cdr3=FALSE, useAffinityWeights=TRUE,computeMax=FALSE,qs=0:2,
-                               log_base=exp(1), distanceCutoff=FALSE, discreteVar="clone_id", nboot=100) {
+                               log_base=exp(1), distanceCutoff=FALSE, discreteVar="clone_id", nboot=100, subsample=2000) {
   model = "spectral"
   method = "vj"
   linkage = c("single", "average", "complete")
@@ -44,6 +44,11 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
   # get clone
   print(groupID)
   db_clone <- as.data.frame(db[db[[group]] == groupID, ])
+  if(nrow(db_clone) > subsample){
+    cat("Subsampling data with", nrow(db_clone), "to", subsample)
+    ix <- sample(1:nrow(db_clone), size=subsample)
+    db_clone <- db_clone[ix,]
+  }
   results_prep = prepare_clone(db = db_clone,
                                junction = junction, v_call = v_call, j_call = j_call,
                                first = first, cdr3 = cdr3, fields = fields,
@@ -659,5 +664,107 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
     #dgc <- dgc[rgsw >0,]
     return(return_list)
   }
+}
+
+#' Run functional_diversity using metadata stored in a Seurat object
+#'
+#' Extracts the cell-level metadata from a Seurat object, optionally remaps
+#' column names to the defaults expected by `functional_diversity`, and then
+#' forwards the augmented metadata to `functional_diversity`.
+#'
+#' @param seurat_obj A Seurat or SeuratObject containing the required metadata.
+#' @param groupID Identifier (or identifiers) of the group in the column supplied via `group`.
+#' @param phenotype_var Name of the metadata column describing phenotypes; passed to `functional_diversity`.
+#' @param phenotype_reference Optional phenotype label to use as reference; passed to `functional_diversity`.
+#' @param group Name of the metadata column describing the grouping variable; passed to `functional_diversity`.
+#' @param column_map Named list mapping canonical column names used by `functional_diversity`
+#'   (`clone_id`, `germline_alignment`, `sequence_alignment`, `junction`, `locus`) to the
+#'   corresponding column names present in the Seurat metadata. Defaults assume metadata already
+#'   uses the canonical names.
+#' @param metadata Optional data.frame to use instead of extracting metadata from `seurat_obj`.
+#' @param ... Additional arguments forwarded to `functional_diversity`.
+#'
+#' @return The result of calling `functional_diversity` on the extracted metadata.
+#' @export
+functional_diversity_from_seurat <- function(seurat_obj,
+                                             groupID,
+                                             phenotype_var = "subset",
+                                             phenotype_reference = NULL,
+                                             group = "subject_id",
+                                             column_map = list(
+                                               clone_id = "clone_id",
+                                               germline_alignment = "germline_alignment",
+                                               sequence_alignment = "sequence_alignment",
+                                               junction = "junction",
+                                               locus = "locus"
+                                             ),
+                                             metadata = NULL,
+                                             ...) {
+
+  dots <- list(...)
+
+  if (!inherits(seurat_obj, c("Seurat", "SeuratObject"))) {
+    stop("`seurat_obj` must inherit from `Seurat` or `SeuratObject`.")
+  }
+
+  if (is.null(metadata)) {
+    metadata <- tryCatch(seurat_obj[[]], error = function(e) NULL)
+    if (is.null(metadata)) {
+      metadata <- tryCatch(seurat_obj@meta.data, error = function(e) NULL)
+    }
+  }
+
+  if (is.null(metadata) || !is.data.frame(metadata)) {
+    stop("Unable to extract metadata from `seurat_obj`; supply it via the `metadata` argument.")
+  }
+
+  db <- as.data.frame(metadata, stringsAsFactors = FALSE)
+
+  required_map_names <- c("clone_id", "germline_alignment", "sequence_alignment", "junction", "locus")
+  missing_map_names <- setdiff(required_map_names, names(column_map))
+  if (length(missing_map_names) > 0) {
+    stop("`column_map` must provide entries for: ", paste(missing_map_names, collapse = ", "), ".")
+  }
+
+  required_cols <- unique(c(group, phenotype_var, unlist(column_map)))
+  missing_cols <- setdiff(required_cols, colnames(db))
+  if (length(missing_cols) > 0) {
+    stop("The following required metadata columns are missing: ", paste(missing_cols, collapse = ", "), ".")
+  }
+
+  for (canonical_name in names(column_map)) {
+    source_col <- column_map[[canonical_name]]
+    if (!identical(canonical_name, source_col) || !canonical_name %in% colnames(db)) {
+      db[[canonical_name]] <- db[[source_col]]
+    }
+  }
+
+  if (!"cell_id" %in% colnames(db)) {
+    db$cell_id <- rownames(db)
+  }
+
+  if (is.null(groupID) && !"groupID" %in% names(dots)) {
+    stop("`groupID` must be supplied to identify the group to analyse.")
+  }
+
+  default_args <- list(
+    db = db,
+    groupID = groupID,
+    phenotype_var = phenotype_var,
+    phenotype_reference = phenotype_reference,
+    group = group
+  )
+
+  if (!"cell_id" %in% names(dots)) {
+    default_args$cell_id <- "cell_id"
+  }
+
+  if (!"discreteVar" %in% names(dots) && "clone_id" %in% names(db)) {
+    default_args$discreteVar <- "clone_id"
+  }
+
+  args <- utils::modifyList(default_args, dots)
+
+  do.call(functional_diversity, args)
 }
 
