@@ -22,13 +22,13 @@ Install the development version from GitHub with `remotes` (or `devtools`):
 
 ```r
 install.packages("remotes")
-remotes::install_github("your-org/BCRi")
+remotes::install_github("DoaneAS/BCRi")
 ```
 
 Alternatively, clone the repository and install from source:
 
 ```r
-git clone https://github.com/your-org/BCRi.git
+git clone https://github.com/DoaneAS/BCRi.git
 setwd("BCRi")
 devtools::install()
 ```
