@@ -9,9 +9,9 @@
 #' @param log_base base of log to use for shannon entropy calculations
 #' @export
 #' @returns data.frame of diversity metrics and phenotype ##list with affinity matrix, db for clone, and data.frame of per-phenotype diversity metrics using Simposon diversity
-functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", phenotype_reference=NULL,  cell_id=NULL,similarity=TRUE,
-                               group = "subject_id", cdr3=FALSE, useAffinityWeights=TRUE,computeMax=FALSE,qs=0:2,
-                               log_base=exp(1), distanceCutoff=FALSE, discreteVar="clone_id", nboot=100, subsample=2000) {
+functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", phenotype_reference=NULL,  cell_id=NULL, similarity=TRUE,
+                               group = "subject_id", cdr3=FALSE, useAffinityWeights=TRUE,qs=0:2,
+                               log_base=exp(1), distanceCutoff=FALSE, discreteVar="clone_id", nboot=100, subsample=NULL) {
   model = "spectral"
   method = "vj"
   linkage = c("single", "average", "complete")
@@ -43,12 +43,17 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
 
   # get clone
   print(groupID)
+
   db_clone <- as.data.frame(db[db[[group]] == groupID, ])
-  if(nrow(db_clone) > subsample){
-    cat("Subsampling data with", nrow(db_clone), "to", subsample)
-    ix <- sample(1:nrow(db_clone), size=subsample)
-    db_clone <- db_clone[ix,]
+
+  if(!is.null(subsample)){
+    if(nrow(db_clone) > subsample){
+      cat("Subsampling ", nrow(db_clone), " cells to ", subsample, " cells... \n")
+      ix <- sample(1:nrow(db_clone), size=subsample)
+      db_clone <- db_clone[ix,]
+    }
   }
+
   results_prep = prepare_clone(db = db_clone,
                                junction = junction, v_call = v_call, j_call = j_call,
                                first = first, cdr3 = cdr3, fields = fields,
@@ -339,6 +344,44 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
 
     dbp_p = dbp
 
+    ###proportion private to phenotype
+    for (f in unique(db_gp[[phenotype_var]])) {
+      dbp_p[[f]] = dbp_p[[f]] / sum(dbp_p[[f]])
+    }
+    ###
+
+    for (f in unique(db_gp[[phenotype_var]])) {
+      rgslist=list()
+      wlist = list()
+      #dlist = list()
+      #dwlist = list()
+      ix = dbp_p[[indVar]]
+      if (sum(dbp_p[[f]]) == 0) {
+        next
+      }
+
+      for (i in ix) {
+        #jx = setdiff(ix, i)
+        wn = dbp_p$wn[i]
+        #d = dbp_p$d[i]
+        #dw = dbp_p$dw[i]
+        #pj = sum(dbp_p[[f]][jx])
+        rgslist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * wn
+        wlist[i] = wn
+        #dlist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * d
+        # dwlist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * dw
+      }
+
+      if (sum(unlist(rgslist)) == 0) {
+        next
+      }
+
+      dgc$rgsw[dgc$pheno==f] =  sum(unlist(rgslist))
+      dgc$wmax[dgc$pheno==f] = max(unlist(wlist))
+    }
+
+    dgc$beta1 = dgc$wmax * (1 - (1/n_unq))
+    dgc$rgsw_norm = dgc$rgsw / dgc$beta1
 
 
     #jdmatn = normalize_columns(jdmat)
@@ -356,29 +399,29 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
     #
     cat("calculating entropies...")
 
-
-    entropies <- numeric(ncol(jdmat))
-    max_entropies <- numeric(ncol(jdmat))
-    normalized_entropies <- numeric(ncol(jdmat))
-    diversities <- numeric(ncol(jdmat))
-    normalized_diversities <- numeric(ncol(jdmat))
-
-    null_entropies <- numeric(ncol(jdmat))
-    null_max_entropies <- numeric(ncol(jdmat))
-    null_normalized_entropies <- numeric(ncol(jdmat))
-    null_diversities <- numeric(ncol(jdmat))
-    null_normalized_diversities <- numeric(ncol(jdmat))
-
-    disc_entropies <- numeric(ncol(jdmat))
-    disc_max_entropies <- numeric(ncol(jdmat))
-    disc_normalized_entropies <- numeric(ncol(jdmat))
-    disc_diversities <- numeric(ncol(jdmat))
-    disc_normalized_diversities <- numeric(ncol(jdmat))
-
-    probs_matrix <- normalize_columns(jdmat)
-    totp = rowSums(jdmat)
-    totP = totp / sum(totp)
-    cell_n = colSums(jdmat)
+#
+#     entropies <- numeric(ncol(jdmat))
+#     max_entropies <- numeric(ncol(jdmat))
+#     normalized_entropies <- numeric(ncol(jdmat))
+#     diversities <- numeric(ncol(jdmat))
+#     normalized_diversities <- numeric(ncol(jdmat))
+#
+#     null_entropies <- numeric(ncol(jdmat))
+#     null_max_entropies <- numeric(ncol(jdmat))
+#     null_normalized_entropies <- numeric(ncol(jdmat))
+#     null_diversities <- numeric(ncol(jdmat))
+#     null_normalized_diversities <- numeric(ncol(jdmat))
+#
+#     disc_entropies <- numeric(ncol(jdmat))
+#     disc_max_entropies <- numeric(ncol(jdmat))
+#     disc_normalized_entropies <- numeric(ncol(jdmat))
+#     disc_diversities <- numeric(ncol(jdmat))
+#     disc_normalized_diversities <- numeric(ncol(jdmat))
+#
+     probs_matrix <- normalize_columns(jdmat)
+     totp = rowSums(jdmat)
+     totP = totp / sum(totp)
+     cell_n = colSums(jdmat)
 
     #
     #     for (i in 1:ncol(probs_matrix)) {
@@ -518,12 +561,6 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
     db_gp$cid <- paste0("cid_", db_gp$ind)
 
 
-    ## bootstrap sampling
-    ##
-    for (f in unique(db_gp[[phenotype_var]])) {
-
-    }
-
     ddf = computeDs(jdmat, aff_mtx, qs=qs)
     nmat <- aff_mtx
     nmat[] <- 0
@@ -553,91 +590,10 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
     # bres_c <- makeBoot(db_gp, jdmat=jdmat, aff_mat=aff_mtx, group=phenotype_var, qs=qs, nboot=nboot, clone="cid", min_n=2, max_n=NULL)
 
     bres$groupID <- groupID
-
-
-    ## bootsrapping and corrected abundances
-    ##
-    # abdp <- estimateAbundance(db_gp, clone=indVar, group=phenotype_var)
-    # adf <- abdp@abundance
-    # setDT(adf)
-    # adf <- adf[adf[[indVar]] %in% db_gp[[indVar]],]
-    # bdf <- abdp@bootstrap
-    # setDT(bdf)
-    # bdf <- bdf[bdf[[indVar]] %in% db_gp[[indVar]],]
-    # admat <-  adf %>% dplyr::group_by(.data[[indVar]], .data[[phenotype_var]]) %>%
-    #   dplyr::summarise(p = sum(p)) %>%
-    #   tidyr::spread(key = {{phenotype_var}}, value = p, fill=0) %>%
-    #   dplyr::ungroup() ##%>%
-    #
-    # setDT(admat)
-    # setkey(admat, ind)
-    #
-    # admat <- admat[dbp[[indVar]],] %>%
-    #   dplyr::select(-.data[[indVar]]) %>% as.matrix()
-    #
-    # ddf_a = computeDs(admat, aff_mtx, qs=qs)
-    # ddf_a$sim = "global_abundance_corrected"
     ddf <- rbind(ddf, ddf_n, ddf_i, ddf_clone)
-
     ddf$groupID <- groupID
-    #ddf_a$groupID <- groupID
 
 
-
-    # bdmat <-  bdf %>% dplyr::group_by(.data[[indVar]], .data[[phenotype_var]]) %>%
-    #   dplyr::summarise(p = sum(p)) %>%
-    #   tidyr::spread(key = {{phenotype_var}}, value = p, fill=0) %>%
-    #   dplyr::ungroup() ##%>%
-    #
-    # setDT(bdmat)
-    # setkey(bdmat, ind)
-    #
-    # bdmat <- bdmat[dbp[[indVar]],] %>%
-    #   dplyr::select(-.data[[indVar]]) %>% as.matrix()
-
-
-
-
-
-
-    ###proportion private to phenotype
-    for (f in unique(db_gp[[phenotype_var]])) {
-      dbp_p[[f]] = dbp_p[[f]] / sum(dbp_p[[f]])
-    }
-    ###
-
-    for (f in unique(db_gp[[phenotype_var]])) {
-      rgslist=list()
-      wlist = list()
-      #dlist = list()
-      #dwlist = list()
-      ix = dbp_p[[indVar]]
-      if (sum(dbp_p[[f]]) == 0) {
-        next
-      }
-
-      for (i in ix) {
-        #jx = setdiff(ix, i)
-        wn = dbp_p$wn[i]
-        #d = dbp_p$d[i]
-        #dw = dbp_p$dw[i]
-        #pj = sum(dbp_p[[f]][jx])
-        rgslist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * wn
-        wlist[i] = wn
-        #dlist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * d
-        # dwlist[i] =  dbp_p[[f]][i] * (1-dbp_p[[f]][i]) * dw
-      }
-
-      if (sum(unlist(rgslist)) == 0) {
-        next
-      }
-
-      dgc$rgsw[dgc$pheno==f] =  sum(unlist(rgslist))
-      dgc$wmax[dgc$pheno==f] = max(unlist(wlist))
-    }
-
-    dgc$beta1 = dgc$wmax * (1 - (1/n_unq))
-    dgc$rgsw_norm = dgc$rgsw / dgc$beta1
 
     cat("completed\n")
 
@@ -648,7 +604,7 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
                         "P" = jdmat,
                         #"weighted_RGS_pairs" =  regw,
                         #"weighted_RGS" = rgw,
-                        "db_pheno"= dgc,
+                        ##"db_pheno"= dgc,
                         #"rel_entropies" = rentropy,
                         #"marginal_entropies" = entropy_df,
                         "diversities" = ddf,

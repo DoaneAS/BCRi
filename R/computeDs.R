@@ -157,7 +157,7 @@ makeBoot <- function(db, jdmat, aff_mat, group, qs, nboot=100, clone="cid", min_
     names(abund_obs) <- clone_tab[[clone]][clone_tab[[group]] == g]
     boot_list[[g]] <- mosaic::do(100)*bootD(mosaic::resample(names(abund_obs), size=n,replace = TRUE), jdmat, aff_mat, f=g, qs)
   }
-  bootdf <- rbindlist(boot_list, idcol = "phenotype")
+  bootdf <- data.table::rbindlist(boot_list, idcol = "phenotype")
   return(bootdf)
 }
 

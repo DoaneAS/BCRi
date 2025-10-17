@@ -12,7 +12,7 @@
 #' @importFrom  alakazam    pairwiseDist checkColumns getDNAMatrix getAAMatrix
 #'                          padSeqEnds progressBar groupGenes baseTheme translateDNA
 #'                          getLocus
-#' @importFrom  data.table  as.data.table .I
+#' @importFrom  data.table  as.data.table .I rbindlist
 #' @importFrom  doParallel  registerDoParallel
 #' @importFrom  dplyr       n %>% do
 #'                          filter select arrange bind_rows
