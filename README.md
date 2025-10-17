@@ -8,6 +8,21 @@ The BCRi toolset incorporates adaptive immune receptor repertoire (AIRR) data at
 
 ![Graphical abstract of the BCRi method](inst/extdata/sketch.png)
 
+**BCRi integrates B cell phenotypic states, clonotype abundances, and clonal lineage relationships to
+provide a unified functional diversity framework that charts stages of B cell repertoire development.**
+**a)** Ilustration of mature B cell phenotypic states and their contribitions to immunoglobulin affinity maturation
+through clonal expansion of activated B cells and successive rounds of diversitification and selection in
+germinal centers. **b)** Illustration of the joint distribution of cell phenotype and clonotype derived from single
+cell RNA+VDJ sequencing datasets, with rows of clonotypes that represent unique BCR sequences, and
+columns of phenotypic states, defined by gene expression. **c)** Functional similarity between clonotypes is
+captured by a similarity matrix Z, which incorporates Hamming distance, somatic hypermutation (SHM)
+sequence context, and likelihood of shared mutations for all pairs of clonotypes. **d)** BCRi formalizes a metric
+termed effective functional clonotypic diversity, qDZ, where the viewpoint parameter q denotes diversity
+order and calculating qDZ across a range of q values generates a diversity profile that reveals how repertoire
+structure changes with increasing emphasis on abundant or functionally redundant clonotypes. At any value
+of q, the resulting diversity can be interpreted as the effective number of functionally distinct BCRs. Diversity
+profile plot of human tonsillar B cells using single cell RNA+VDJ data from King et al.
+
 BCRi leverages an information theoretic framework applied to these data structures to quantify relationships between cell phenotype and immune repertoire. The package formalizes repertoire diversity metrics based on Shannon entropy that capture both varying abundances of BCR clonotypes and clonal families, as well as the varying sequence similarity at single-cell resolution.
 
 ## Key Features
@@ -106,4 +121,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
