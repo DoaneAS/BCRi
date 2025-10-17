@@ -6,6 +6,8 @@ Tools for exploring the interplay between B cell receptor (BCR) sequence diversi
 
 The BCRi toolset incorporates adaptive immune receptor repertoire (AIRR) data at single-cell resolution that has been annotated for cell state or any other phenotypic covariate of interest. BCRi then constructs the repertoire-phenotype joint distribution in which each row corresponds to a distinct BCR sequence—by default, the sequence encoding the VDJ heavy chain—and each column represents a cell phenotype. A symmetric similarity matrix `k` defines the relationship between all pairs of BCR sequences; in the simplest case, `k` is the identity matrix spanning the `n` unique sequences.
 
+![Graphical abstract of the BCRi method](inst/extdata/sketch.png)
+
 BCRi leverages an information theoretic framework applied to these data structures to quantify relationships between cell phenotype and immune repertoire. The package formalizes repertoire diversity metrics based on Shannon entropy that capture both varying abundances of BCR clonotypes and clonal families, as well as the varying sequence similarity at single-cell resolution.
 
 ## Key Features
@@ -37,7 +39,7 @@ devtools::install()
 
 ```r
 library(BCRi)
-
+data(db)
 # Example: run diversity analysis on a prepared AIRR data.frame
 diversity_metrics <- functional_diversity(
   db = airr_table,
@@ -46,12 +48,25 @@ diversity_metrics <- functional_diversity(
   group = "subject_id"
 )
 
+ diversity_metrics <- functional_diversity(
+  db = db, 
+  groupID = "BCP5", 
+  cell_id = "cell_id", 
+  phenotype_var = "CellPhenoGCs", 
+  similarity = TRUE, 
+  distanceCutoff = FALSE, 
+  discreteVar = "clone_id")
+
+
 # Example: compute diversity directly from a Seurat object
 diversity_from_seurat <- functional_diversity_from_seurat(
   seurat_obj = seurat_object,
-  groupID = "subject_A",
-  phenotype_var = "celltype",
-  group = "subject_id"
+  groupID = "BCP5", 
+  cell_id = "cell_id", 
+  phenotype_var = "CellPhenoGCs", 
+  similarity = TRUE, 
+  distanceCutoff = FALSE, 
+  discreteVar = "clone_id"
 )
 ```
 
@@ -91,5 +106,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
 
