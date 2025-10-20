@@ -1,30 +1,61 @@
 
 #' Takes a db, a cloneID, and the name of a phenotype variable and returns the affinity matrix, db, and data.frame of per-phenotype diversity metrics for that clone
 #'
-#' @param db db
+#' @param db AIRR-compliant data.frame
 #' @param cloneID ID of clone to analyze
-#' @param phenotype_var phenotype variable
-#' @param cell_id cell id
-#' @param clone column name of clone variable in db
+#' @param phenotype_var phenotype variable in db for which to calculate diversity metrics
+#' @param cell_id cell id column name in db. Default is "cell_id", which applies to AIRR-compliant data.frames. Use `cell_id` = NULL for bulk repertoire data.
+#' @param discreteVar column name of discrete variable in db representing clonal families. Default is "clone_id". 
+#' @param similarity logical indicating whether to calculate similarity matrix. Default is TRUE.
+#' @param group column name of group variable in db. Default is "subject_id", which applies to AIRR-compliant data.frames. Use `group` = NULL for bulk repertoire data.
+#' @param cdr3 logical indicating whether to calculate CDR3 diversity metrics. Default is FALSE.
+#' @param useAffinityWeights logical indicating whether to use affinity weights. Default is TRUE.
+#' @param qs vector of q values to calculate diversity metrics for. Default is 0:2.
+#' @param log_base base of log to use for shannon entropy calculations. Default is exp(1).
+#' @param distanceCutoff logical indicating whether to use distance cutoff. Default is FALSE.
 #' @param log_base base of log to use for shannon entropy calculations
-#' @export
-#' @returns data.frame of diversity metrics and phenotype ##list with affinity matrix, db for clone, and data.frame of per-phenotype diversity metrics using Simposon diversity
-functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", phenotype_reference=NULL,  cell_id=NULL, similarity=TRUE,
-                               group = "subject_id", cdr3=FALSE, useAffinityWeights=TRUE,qs=0:2,
-                               log_base=exp(1), distanceCutoff=FALSE, discreteVar="clone_id", nboot=100, subsample=NULL) {
+#' @param germline column name of germline sequence in db. Default is "germline_alignment".
+#' @param sequence column name of sequence in db. Default is "sequence_alignment".
+#' @param junction column name of junction sequence in db. Default is "junction".
+#' @param v_call column name of V-call in db. Default is "v_call".
+#' @param j_call column name of J-call in db. Default is "j_call".
+#' @param locus column name of locus in db. Default is "locus".
+#' @param only_heavy logical indicating whether to only use heavy chain sequences. Default is TRUE.
+#' @param split_light logical indicating whether to split light chain sequences. Default is FALSE.
+#' @param nboot number of bootstrap replicates to calculate diversity metrics. Default is 100.
+#' @param subsample number of cells to subsample from the db. Default is NULL.
+#' @details
+#' * Clonotype refers to the unique BCR sequence.  Clonal family refers to the set of clonotypes that share the same `discreteVar` value.
+#' * Diversities calculated using different approaches and returned in the `diversities` list:
+#'  `naive` = BCR clonotype abundances without considering functional similarity; 
+#'  `similarity_within_family` = BCR clonotype abundances and functional similarity, where similarity is considered only within clonal families as defined by `discreteVar`; 
+#'  `global` = diversity BCR clonotype abundances and functional similarity considering similarity between all clonotypes; 
+#'  `discrete_clonotypic` = diversity calculated using abundances that result from aggregating each clonotype by `discreteVar`.
+#' @returns a [list()] containing 
+#' * `diversities`: see @details 
+#' *`$functional_similarity_matrix` (the functional similarity matrix).
+#' *`$db_clonotype`: the db aggregated by clonotype as defined by unique BCR sequences);
+#' * `P`: the joint distribution of clonotype abundances and phenotype;
+#' * `P_family`: the joint distribution of clonal family abundances (as defined by `discreteVar`) and phenotype;
+#' * `metaDiversities`: meta-diversity metrics calculated using the joint distributions of clonotype abundances and functional similarity with phenotype;
+#' * `diversities_shuffle`: diversity metrics calculated using a shuffle approach to estimate the null distribution of diversity metrics;
+#' * `diversities_boot`: diversity metrics calculated using a bootstrap approach to estimate the confidence interval of diversity metrics;
+#' @export 
+functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", phenotype_reference=NULL,  cell_id="cell_id", similarity=TRUE,
+                                  group = "subject_id", cdr3=FALSE, useAffinityWeights=TRUE,qs=0:2, germline = "germline_alignment", 
+                                  sequence = "sequence_alignment",
+                                  junction = "junction", v_call = "v_call", j_call = "j_call", locus = "locus", 
+                                  only_heavy = TRUE, split_light = FALSE,
+                                  log_base=exp(1), distanceCutoff=FALSE, discreteVar="clone_id", nboot=100, subsample=NULL) {
+
+  # get clone
+  print(groupID)
   model = "spectral"
   method = "vj"
   linkage = c("single", "average", "complete")
   normalize = "len" ## c("len", "none"),
-  germline = "germline_alignment"
-  sequence = "sequence_alignment"
-  junction = "junction"
-  v_call = "v_call"
-  j_call = "j_call"
   fields = NULL
-  locus = "locus"
-  only_heavy = TRUE
-  split_light = FALSE
+
   targeting_model = shazam::HH_S5F
   len_limit = NULL
   first = FALSE
@@ -40,9 +71,6 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
   log = NULL
   summarize_clones = FALSE
   indVar = "ind"
-
-  # get clone
-  print(groupID)
 
   db_clone <- as.data.frame(db[db[[group]] == groupID, ])
 
@@ -190,15 +218,6 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
       aff_mtx <- krnl_mtx
     }
 
-    ## allow cutoff using a user supplied variable\
-
-    ### use only for global
-    # aff_mtx <- makeAffinity(mtx_o = mtx,
-    #                       mtx_k = krnl_mtx,
-    #                      thd = max(nearest_dist, na.rm = T))
-
-
-
     threshold = NULL
     base_sim = 0.95
     iter_max = 1000
@@ -209,8 +228,6 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
     bs <- (1 - base_sim)*junc_length
     off_diags_nuq <- unique(mtx[row(mtx) != col(mtx)])
 
-
-    #aff_mtx <- krnl_mtx
 
     aff_mtx[is.na(aff_mtx)] <- 0
 
@@ -289,9 +306,7 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
       #db_gp$wn[db_gp$ind == i] = sum(aff_mtx[i, ]) / sum(aff_mtx)
     }
 
-
     wijmat = matrix(0, nrow = nrow(dbj), ncol = nrow(dbj))
-
 
     dbp =  get_jd(db_gp, pheno = phenotype_var,indVar = indVar)
     dpp =  get_jd_p(db_gp, pheno = phenotype_var,indVar = indVar)
@@ -314,33 +329,6 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
       tidyr::spread(key = {{phenotype_var}}, value = n, fill=0) %>%
       dplyr::ungroup() %>%
       dplyr::select(-.data[[discreteVar]]) %>% as.matrix()
-
-
-    # cat("calculating simpson diversities...\n")
-
-    # regw <- weighted_rich_gini_simpson_affinity_pairs(jdmat,
-    #                                                   sequence_weights = kdmatrix,
-    #                                                   #sequence_weights = disim_mtx,
-    #                                                   affinity_weights = dbp$w,
-    #                                                   #useRichness= TRUE,
-    #                                                   #normalize_phenos = TRUE,
-    #                                                   pheno_weights = NULL,
-    #                                                   zero_handling = "ignore")
-    #
-    #
-    #
-    # rgw <- weighted_rich_gini_simpson_affinity(jdmat,
-    #                                            affinity_weights = dbp$w,
-    #                                            #useRichness= TRUE,
-    #                                            #normalize_phenos = TRUE,
-    #                                            #pheno_weights = NULL,
-    #                                            zero_handling = "ignore")
-    #
-    # rgw$groupID = groupID
-    # regw$groupID = groupID
-    #
-
-
 
     dbp_p = dbp
 
@@ -382,179 +370,14 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
 
     dgc$beta1 = dgc$wmax * (1 - (1/n_unq))
     dgc$rgsw_norm = dgc$rgsw / dgc$beta1
-
-
-    #jdmatn = normalize_columns(jdmat)
-    #
-    #     for (f in unique(db_gp[[phenotype_var]])) {
-    #       p = dbp[[f]] / sum(dbp[[f]])
-    #       ent <- similarity_sensitive_entropy(probabilities =p,
-    #                                          similarity_matrix = aff_mtx,
-    #                                          base = log_base,
-    #                                          normalize_similarity = FALSE)
-    #       dgc$clonotypic_entropy_sim[dgc$pheno==f] = ent
-    #       dgc$clonotypic_entropy_sim_norm[dgc$pheno==f] = ent / logf(length(p), base=log_base)
-    #     }
-    #
-    #
-    cat("calculating entropies...")
-
-#
-#     entropies <- numeric(ncol(jdmat))
-#     max_entropies <- numeric(ncol(jdmat))
-#     normalized_entropies <- numeric(ncol(jdmat))
-#     diversities <- numeric(ncol(jdmat))
-#     normalized_diversities <- numeric(ncol(jdmat))
-#
-#     null_entropies <- numeric(ncol(jdmat))
-#     null_max_entropies <- numeric(ncol(jdmat))
-#     null_normalized_entropies <- numeric(ncol(jdmat))
-#     null_diversities <- numeric(ncol(jdmat))
-#     null_normalized_diversities <- numeric(ncol(jdmat))
-#
-#     disc_entropies <- numeric(ncol(jdmat))
-#     disc_max_entropies <- numeric(ncol(jdmat))
-#     disc_normalized_entropies <- numeric(ncol(jdmat))
-#     disc_diversities <- numeric(ncol(jdmat))
-#     disc_normalized_diversities <- numeric(ncol(jdmat))
-#
-     probs_matrix <- normalize_columns(jdmat)
-     totp = rowSums(jdmat)
-     totP = totp / sum(totp)
-     cell_n = colSums(jdmat)
-
-    #
-    #     for (i in 1:ncol(probs_matrix)) {
-    #       cname = colnames(probs_matrix)[i]
-    #       tryCatch({
-    #       result <- similarity_sensitive_entropy(probs_matrix[, i], aff_mtx, base = log_base, computeMax = computeMax)
-    #       entropies[i] <- result$entropy
-    #       max_entropies[i] <- result$max_entropy
-    #       normalized_entropies[i] <- result$normalized_entropy
-    #       diversities[i] <- result$diversity
-    #       normalized_diversities[i] <- result$normalized_diversity
-    #
-    #       resultn <- similarity_sensitive_entropy(probs_matrix[, i], cmat, base=log_base,  computeMax = computeMax)
-    #       null_entropies[i] <- resultn$entropy
-    #       null_max_entropies[i] <- resultn$max_entropy
-    #       null_normalized_entropies[i] <- resultn$normalized_entropy
-    #       null_diversities[i] <- resultn$diversity
-    #       null_normalized_diversities[i] <- resultn$normalized_diversity
-    #
-    #       resultd <- similarity_sensitive_entropy(probs_matrix[, i], d_mtx, base=log_base,  computeMax = computeMax)
-    #       disc_entropies[i] <- resultd$entropy
-    #       disc_max_entropies[i] <- resultd$max_entropy
-    #       disc_normalized_entropies[i] <- resultd$normalized_entropy
-    #       disc_diversities[i] <- resultd$diversity
-    #       disc_normalized_diversities[i] <- resultd$normalized_diversity
-    #
-    #     }, error = function(e) {
-    #         print(paste("Error in Shannon entropy calculation for phenotype:", cname))
-    #         entropies[i] <- NA
-    #         max_entropies[i] <- NA
-    #         normalized_entropies[i] <- NA
-    #         diversities[i] <- NA
-    #         normalized_diversities[i] <- NA
-    #       })
-    #     }
-    #
-    #     #cat("\nEntropy values:\n")
-    #     entropy_df <- data.frame(
-    #       Distribution = colnames(probs_matrix),
-    #       Entropy = entropies,
-    #       Max_Entropy = max_entropies,
-    #       Normalized_Entropy = normalized_entropies,
-    #       Normalized_Diversity = normalized_diversities,
-    #       Diversity = diversities,
-    #       naive_Entropy = null_entropies,
-    #       naive_Max_Entropy = null_max_entropies,
-    #       naive_Normalized_Entropy = null_normalized_entropies,
-    #       naive_Normalized_Diversity = null_normalized_diversities,
-    #       naive_Diversity = null_diversities,
-    #       isim_Entropy = disc_entropies,
-    #       isim_Max_Entropy = disc_max_entropies,
-    #       isim_Normalized_Entropy = disc_normalized_entropies,
-    #       isim_Normalized_Diversity = disc_normalized_diversities,
-    #       isim_Diversity = disc_diversities,
-    #       cell_n = cell_n
-    #     )
-    #     entropy_df$n = nrow(dbp)
-    #     entropy_df$groupID = groupID
-    #
-    #
-    #
-    #
-    # ## add results to dgc
-    #     for (f in colnames(jdmat)) {
-    #         dgc$clonotypic_entropy_sim[dgc$pheno==f] = entropy_df$Entropy[entropy_df$Distribution == f]
-    #         dgc$clonotypic_entropy_sim_mnorm[dgc$pheno==f] = entropy_df$Normalized_Entropy[entropy_df$Distribution == f]
-    #         dgc$clonotypic_entropy_sim_lnorm[dgc$pheno==f] =  entropy_df$Entropy[entropy_df$Distribution == f] / logf(nrow(dbp), base=log_base)
-    #         dgc$clonotypic_entropy_sim_mlnorm[dgc$pheno==f] =  entropy_df$Normalized_Entropy[entropy_df$Distribution == f] / logf(nrow(dbp), base=log_base)
-    #         dgc$clonotypic_diversity_sim[dgc$pheno==f] =  entropy_df$Normalized_Diversity[entropy_df$Distribution == f]
-    #       }
-    #
-
-
-
+ 
+    cat("calculating diversities...")
+    probs_matrix <- normalize_columns(jdmat)
+    totp = rowSums(jdmat)
+    totP = totp / sum(totp)
+    cell_n = colSums(jdmat)
     probs_matrixT <- cbind(totP, probs_matrix)
     colnames(probs_matrixT)[1] = "Mixed"
-    # xentropy = similarity_sensitive_cross_entropy(
-    #   probs_matrixT,
-    #   aff_mtx,
-    #   reference_distribution = 1,  # Mixed is the second column
-    #   distribution_names = colnames(probs_matrixT)
-    # )
-
-    # if (!is.null(phenotype_reference)) {
-    #   refindex = which(colnames(probs_matrixT) == phenotype_reference)
-    # } else {
-    #   refindex = NULL
-    # }
-    #
-    # rentropy_sim = similarity_sensitive_relative_entropy(
-    #   probs_matrixT,
-    #   aff_mtx,symmetric = FALSE,return_cross_entropy = TRUE,base = log_base,
-    #   reference_distribution = refindex,  # Mixed is the second column
-    #   distribution_names = colnames(probs_matrixT)
-    # )
-    #
-    # rentropy_naive = similarity_sensitive_relative_entropy(
-    #   probs_matrixT,
-    #   cmat,symmetric = FALSE,return_cross_entropy = TRUE, base = log_base,
-    #   reference_distribution = refindex,  # Mixed is the second column
-    #   distribution_names = colnames(probs_matrixT)
-    # )
-    #
-    #
-    # rentropy_isim = similarity_sensitive_relative_entropy(
-    #   probs_matrixT,
-    #   d_mtx, base = log_base, symmetric = FALSE,return_cross_entropy = TRUE,
-    #   reference_distribution = refindex,  # Mixed is the second column
-    #   distribution_names = colnames(probs_matrixT)
-    # )
-    #
-    # rentropy_sim_df = as.data.frame(rentropy_sim$relative_entropy)
-    # rentropy_sim_df$phenotype = rownames(rentropy_sim_df)
-    # rentropy_sim_df$groupID = groupID
-    #
-    # rentropy_df = as.data.frame(rentropy_isim$relative_entropy)
-    # colnames(rentropy_df) =  paste0(colnames(rentropy_df), "_intra_sim")
-    #
-    # rentropy_naive_df = as.data.frame(rentropy_naive$relative_entropy)
-    # colnames(rentropy_naive_df) =  paste0(colnames(rentropy_naive_df), "_discrete")
-    #
-    #
-    # rentropy = cbind(rentropy_sim_df, rentropy_df)
-    # rentropy = cbind(rentropy, rentropy_naive_df)
-    # rentropy$n <- nrow(dbp)
-    # rentropy$ncells <- c(sum(totp), colSums(jdmat))
-    #
-
-
-
-    #qs = seq(0,2, by=.1)
-
-
     rownames(aff_mtx) <- paste0("cid_", dbp$ind)
     colnames(aff_mtx) <- rownames(aff_mtx)
     rownames(jdmat) <- paste0("cid_", dbp$ind)
@@ -570,15 +393,14 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
 
     ddf_clone <- computeDs(jdmat_c,aff_mat=NULL, qs=qs)
     ddf_n$sim = "naive"
-    ddf_i$sim = "sim"
+    ddf_i$sim = "similarity_within_family"
     ddf$sim = "global"
-    ddf_clone$sim <- "clone"
+    ddf_clone$sim <- "discrete_clonotypic"
     ddf_shuffle <- computeDs_shuffle(jdmat,aff_mtx, qs=qs)
     ddf_shuffle$sim <- "shuffle"
 
     ddf_boot = repartition_boot(jdmat = jdmat, aff_mat = aff_mtx, nboot = nboot, qs=qs)
     ddf_boot$groupID <- groupID
-
 
     ddfm <- computeMetaDs(jdmat, aff_mat=aff_mtx, qs=qs)
     ddfm$groupID <- groupID
@@ -587,26 +409,17 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
     db_gp$clone <- db_gp$cid
     bres <- makeBoot(db_gp, jdmat=jdmat, aff_mat=aff_mtx, group=phenotype_var, qs=qs, nboot=nboot, clone="cid", min_n=2, max_n=NULL)
 
-    # bres_c <- makeBoot(db_gp, jdmat=jdmat, aff_mat=aff_mtx, group=phenotype_var, qs=qs, nboot=nboot, clone="cid", min_n=2, max_n=NULL)
-
     bres$groupID <- groupID
     ddf <- rbind(ddf, ddf_n, ddf_i, ddf_clone)
     ddf$groupID <- groupID
 
-
-
     cat("completed\n")
 
-    return_list <- list("affinity_mat" = aff_mtx,
+    return_list <- list("functional_similarity_matrix" = aff_mtx,
                         "disim_mtx" = disim_mtx,
-                        "db_clone" = db_gp,
-                        "jd" = dbp,
+                        "db_clonotype" = db_gp,
                         "P" = jdmat,
-                        #"weighted_RGS_pairs" =  regw,
-                        #"weighted_RGS" = rgw,
-                        ##"db_pheno"= dgc,
-                        #"rel_entropies" = rentropy,
-                        #"marginal_entropies" = entropy_df,
+                        "P_family" = jdmat_c,
                         "diversities" = ddf,
                         ##"diversities_corrected" = ddf_a,
                         "metaDiversities" = ddfm,
@@ -614,10 +427,6 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
                         "diversities_bootstrap" = bres
     )
 
-
-
-    #setDT(dgc)
-    #dgc <- dgc[rgsw >0,]
     return(return_list)
   }
 }
@@ -629,6 +438,7 @@ functional_diversity <- function(db, groupID=NULL, phenotype_var="subset", pheno
 #' forwards the augmented metadata to `functional_diversity`.
 #'
 #' @param seurat_obj A Seurat or SeuratObject containing the required metadata.
+#' @rdname functional_diversity
 #' @param groupID Identifier (or identifiers) of the group in the column supplied via `group`.
 #' @param phenotype_var Name of the metadata column describing phenotypes; passed to `functional_diversity`.
 #' @param phenotype_reference Optional phenotype label to use as reference; passed to `functional_diversity`.
